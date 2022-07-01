@@ -101,6 +101,7 @@ impl Server {
                             "declare-fun" => {/*ignore*/}
                             "assert" => { self.process_assert(l) }
                             "minimize" => { self.process_minimize(l) }
+                            "search" => { self.process_search(l) }
                             _ => { panic!("unknown command {}", command); }
                         }
                     }
@@ -208,6 +209,42 @@ impl Server {
     fn lemma_arity(&self, name: &str) -> usize {
         let r = self.rules.iter().find(|r| r.rulename == name).unwrap();
         r.quantifiers.len() + r.sideconditions.len()
+    }
+
+    fn process_search(&mut self, l: Vec<Sexp>) -> () {
+        let expr: Pattern<SymbolLang> = l[1].to_string().parse().unwrap();
+        let ffn_limit: Ffn = l[2].i().unwrap().try_into().unwrap();
+        self.runner.ffn_limit = ffn_limit;
+        let rewrites: Vec<Rewrite<SymbolLang, ()>> = self.rules.iter().map(|r| r.to_rewrite()).collect();
+        let t = Instant::now();
+        self.runner.run_nonchained(rewrites.iter());
+        let saturation_time = t.elapsed().as_secs_f64();
+        println!("Saturation took {saturation_time:.3}s");
+        self.runner.print_report();
+        
+        let t = Instant::now();
+        print_eclasses_to_file(&self.runner.egraph, "./coq_eclasses_log.txt");
+        let dump_time = t.elapsed().as_secs_f64();
+        println!("Dumping the egraph took {dump_time:.3}s");
+       
+
+        // We now want to give back the results
+        let result = expr.search(&self.runner.egraph);
+         let extractor = Extractor::new(&self.runner.egraph, MotivateTrue);
+        let path = "./coquetier_proof_output.txt";
+        let f = File::create(path).expect("unable to create file");
+        let mut writer = BufWriter::new(f);
+        for search_match in &result {
+            println!("Found evars candidates"); 
+            writeln!(writer, "(* Substitution suggested *)").expect("failed to write to writer");
+            for subst in &search_match.substs {
+                for (var,id) in &subst.vec {
+                    let (_best_cost, best) = extractor.find_best(*id);
+                    writeln!(writer, "(* {} *) {}",var.to_string(), best.to_string()).expect("failed to write to writer");
+                }
+            }
+        } 
+        println!("Wrote proof to {path}"); 
     }
 
     // l = ["minimize", expr, ffn_limit]

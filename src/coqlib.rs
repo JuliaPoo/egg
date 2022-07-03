@@ -11,6 +11,8 @@ fn holify_aux(e: &Sexp) -> Sexp {
                 Sexp::String("hole".to_string())
             } else if l[0] == Sexp::String("Rewrite<=".to_string()) {
                 Sexp::String("hole".to_string())
+            } else if l[0] == Sexp::String("annot".to_string()) {
+                holify_aux(&l[1])
             } else {
                 Sexp::List(l.iter().map(holify_aux).collect())
             }

@@ -30,9 +30,13 @@ impl Rule {
             triggers: Default::default(),
         }
     }
+    
 
     pub fn is_eq(&self) -> bool {
-        self.conclusion_lhs != Sexp::String("&True".to_string())
+        let true_typed : Sexp = Sexp::List(vec![ Sexp::String("annot".to_string()), 
+                                        Sexp::String("&True".to_string()),
+                                        Sexp::String("&Prop".to_string()) ]);
+        self.conclusion_lhs != true_typed
     }
 
     pub fn needs_multipattern(&self) -> bool {

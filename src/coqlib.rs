@@ -2,7 +2,7 @@ use symbolic_expressions::*;
 use std::io::{Write};
 use crate::*;
 
-fn holify_aux(e: &Sexp) -> Sexp {
+pub fn holify_aux(e: &Sexp) -> Sexp {
     match e {
         Sexp::String(s) => Sexp::String(s.replace("AT", "@").replace("DOT", ".")),
         Sexp::Empty => Sexp::Empty,
@@ -106,36 +106,48 @@ pub fn find_distinct_ctor_equals<L: Language + std::fmt::Display, N: Analysis<L>
     let extractor = Extractor::new(eg, AstSize);
     let classes : Vec<&EClass<L, _>> = eg.classes().collect();
     for class in classes {
-        let mut last_ctor_seen : Option<(String, String)> = None;
+        let mut last_ctor_seen : Option<(String, String, String)> = None;
         for node in class.nodes.iter() {
             // The display() method implemented by define_language! macro happens to print only the op name
             // TODO is there a cleaner way to obtain the op name?
-            let opname = format!("{}", node);
-            let is_nonprop_ctor = opname.starts_with("!");
-            if is_nonprop_ctor {
-                match last_ctor_seen.clone() {
-                    Some((ctor1, children1)) => { 
-                        if !(ctor1 == opname) 
-                            {
-                                let mut s: String; 
-                                s = "".to_string();
-                                // Find representant for our children of ctor2
-                                for child in node.children().iter() {
-                                    let (_best_cost, best) = extractor.find_best(*child);
-                                    s.push_str (&format!(" {}", best))
+            let opname_annote = format!("{}", node);
+            if opname_annote == "annot" {
+                let ctor_eclass_id  = node.children()[0];
+                let ctor_type_eclass_id  = node.children()[1];
+                let (_best_cost, ntype) = extractor.find_best(ctor_type_eclass_id);
+                let class_ctor = &eg[ctor_eclass_id];
+                for node in class_ctor.nodes.iter() {
+                    let opname =  format!("{}", node);
+
+                    let is_nonprop_ctor = opname.starts_with("!");
+                    if is_nonprop_ctor {
+                        match last_ctor_seen.clone() {
+                            Some((ctor1, children1, type1)) => { 
+                                if !(ctor1 == opname) 
+                                    {
+                                        let mut s: String; 
+                                        s = "".to_string();
+                                        // Find representant for our children of ctor2
+                                        for child in node.children().iter() {
+                                            let (_best_cost, best) = extractor.find_best(*child);
+                                            s.push_str (&format!(" {}", best))
+                                        }
+                                        return Some((format!("(annot ({} {}) {})", ctor1, children1, type1), format!("(annot ({} {}) {})", opname, s, ntype)))}
                                 }
-                                return Some((format!("({} {})", ctor1, children1), format!("({} {})", opname, s)))}
+                            None => { 
+                                    let mut s: String; 
+                                    s = "".to_string();
+                                    // Find representant for our children of ctor2
+                                    for child in node.children().iter() {
+                                        let (_best_cost, best) = extractor.find_best(*child);
+                                        s.push_str (&format!(" {}", best))
+                                    }
+                                    let stype = format!("{}", ntype);
+                                    last_ctor_seen = Some((opname, s, stype)); }
                         }
-                    None => { 
-                            let mut s: String; 
-                            s = "".to_string();
-                            // Find representant for our children of ctor2
-                            for child in node.children().iter() {
-                                let (_best_cost, best) = extractor.find_best(*child);
-                                s.push_str (&format!(" {}", best))
-                            }
-                            last_ctor_seen = Some((opname, s)); }
+                    }
                 }
+                    
             }
         }
     }
@@ -149,7 +161,8 @@ impl CostFunction<SymbolLang> for MotivateTrue {
     where
         C: FnMut(Id) -> Self::Cost
     {
-        let op_cost = if *enode == SymbolLang::leaf("&True") { 1.0 } else { 2.0 };
+        let op_cost = if *enode == SymbolLang::leaf("&True") { 1.0 } else 
+                           if *enode == SymbolLang::leaf("&Prop") { 1.0 } else { 2.0 };
         enode.fold(op_cost, |sum, id| sum + costs(id))
     }
 }
@@ -167,7 +180,7 @@ pub fn print_equality_proof_to_writer<W: Write>(
     writeln!(writer, "unshelve (");
     for exp in explanation {
         let (holified, fw, name_th, applied_th, new) = holify(lemma_arity, exp);
-        if name_th != "rm_annot" { 
+        // if name_th != "rm_annot" { 
         let rw_lemma = if fw { "@rew_zoom_fw" } else { "@rew_zoom_bw" };
         let th = if is_eq(&name_th.to_string()).unwrap() { 
             format!("{applied_th}")
@@ -180,7 +193,7 @@ pub fn print_equality_proof_to_writer<W: Write>(
         else {
             writeln!(writer, "eapply ({rw_lemma} _ {new} _ {th} (fun hole => {holified}));");
         }
-        }
+        // }
     }
     writeln!(writer, "idtac).");
     writer.flush().expect("error flushing");

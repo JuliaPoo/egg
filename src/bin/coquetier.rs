@@ -276,7 +276,7 @@ impl Server {
         println!("Simplified\n{}\nto\n{}\nwith cost {}", expr, best, best_cost);
         let mut ctor_equals = None;
 
-        if best_cost != 1.0 {
+        if best_cost != 4.0 {
             // Only if we failed to simplify to True (only expression of cost equal to one)
             // then check try to find an inconsistency. This allow us to use
             // Coquetier to generate the proof of equality between the two distinct
@@ -288,6 +288,8 @@ impl Server {
                 let t = Instant::now();
                 let exprt1 : RecExpr<SymbolLang>= t1.parse().unwrap();
                 let exprt2 : RecExpr<SymbolLang>= t2.parse().unwrap();
+                
+                println!("Absurd found the following contradiction: {} {}", exprt1, exprt2);
                 let explanations = self.runner.explain_equivalence(&exprt1, &exprt2).get_flat_sexps();
                 let expl_time = t.elapsed().as_secs_f64();
                 println!("Absurd found Explanation length: {} (took {:.3}s to generate)", explanations.len(), expl_time);
@@ -299,6 +301,10 @@ impl Server {
                 let mut explanation = explanations.iter();
                 explanation.next();
                 writeln!(writer, "(* CONTRADICTION *)").expect("failed to write to writer");
+                let st1 = symbolic_expressions::parser::parse_str(&t1).unwrap(); 
+                let st2 = symbolic_expressions::parser::parse_str(&t2).unwrap(); 
+                let t1 = holify_aux(&st1);
+                let t2 = holify_aux(&st2);
                 writeln!(writer, "assert ({} = {}) as ABSURDCASE.", t1, t2).expect("failed to write to writer");
                 print_equality_proof_to_writer(
                     true,

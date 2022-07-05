@@ -182,6 +182,7 @@ pub fn print_equality_proof_to_writer<W: Write>(
         let (holified, fw, name_th, applied_th, new) = holify(lemma_arity, exp);
         // if name_th != "rm_annot" { 
         let rw_lemma = if fw { "@rew_zoom_fw" } else { "@rew_zoom_bw" };
+        //  let th = format!("{applied_th}") ;
         let th = if is_eq(&name_th.to_string()).unwrap() { 
             format!("{applied_th}")
         } else { 

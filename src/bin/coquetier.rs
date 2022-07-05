@@ -36,7 +36,7 @@ impl Rule {
         let true_typed : Sexp = Sexp::List(vec![ Sexp::String("annot".to_string()), 
                                         Sexp::String("&True".to_string()),
                                         Sexp::String("&Prop".to_string()) ]);
-        self.conclusion_lhs != true_typed
+        return self.conclusion_lhs != true_typed || (self.rulename == "reify_fundamental".to_string());
     }
 
     pub fn needs_multipattern(&self) -> bool {
@@ -240,11 +240,11 @@ impl Server {
         let mut writer = BufWriter::new(f);
         for search_match in &result {
             println!("Found evars candidates"); 
-            writeln!(writer, "(* Substitution suggested *)").expect("failed to write to writer");
             for subst in &search_match.substs {
+                writeln!(writer, "(* Substitution suggested *)").expect("failed to write to writer");
                 for (var,id) in &subst.vec {
                     let (_best_cost, best) = extractor.find_best(*id);
-                    writeln!(writer, "(* {} *) {}",var.to_string(), best.to_string()).expect("failed to write to writer");
+                    writeln!(writer, "var {}\nval {}",var.to_string(), best.to_string()).expect("failed to write to writer");
                 }
             }
         } 

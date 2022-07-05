@@ -244,7 +244,10 @@ impl Server {
                 writeln!(writer, "(* Substitution suggested *)").expect("failed to write to writer");
                 for (var,id) in &subst.vec {
                     let (_best_cost, best) = extractor.find_best(*id);
-                    writeln!(writer, "var {}\nval {}",var.to_string(), best.to_string()).expect("failed to write to writer");
+                    let sbest = format!("{}",best);
+                    let sexpbest = symbolic_expressions::parser::parse_str(&sbest).unwrap(); 
+                    let processed = holify_aux(&sexpbest);
+                    writeln!(writer, "var {}\nval {}",var.to_string(), processed).expect("failed to write to writer");
                 }
             }
         } 

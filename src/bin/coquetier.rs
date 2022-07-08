@@ -8,6 +8,9 @@ use std::convert::TryInto;
 use std::str::FromStr;
 use std::fs::File;
 use std::io::{BufWriter, Write, BufRead};
+use hashbrown::HashMap;
+
+
 
 
 struct Rule {
@@ -78,17 +81,22 @@ impl Rule {
 
 struct Server {
     rules: Vec<Rule>,
-    runner: Runner<SymbolLang, ()>
+    runner: Runner<SymbolLang, ()>,
+    cost: HashMap<String, f64,  fxhash::FxBuildHasher>,
 }
 
 impl Server {
     pub fn new() -> Self {
+        let mut c:HashMap<String, f64,  fxhash::FxBuildHasher> = Default::default();
+        c.insert("&True".to_string(),1.0);
+        c.insert("&Prop".to_string(),1.0);
         Self { 
             rules: Default::default(), 
             runner: Runner::default()
                 .with_explanations_enabled()
                 .with_node_limit(10000)
-                .with_time_limit(instant::Duration::from_secs(10))
+                .with_time_limit(instant::Duration::from_secs(10)),
+            cost: c 
         }
     }
 
@@ -106,6 +114,7 @@ impl Server {
                             "assert" => { self.process_assert(l) }
                             "minimize" => { self.process_minimize(l) }
                             "search" => { self.process_search(l) }
+                            "avoid" => { self.process_avoid(l) }
                             _ => { panic!("unknown command {}", command); }
                         }
                     }
@@ -115,6 +124,14 @@ impl Server {
             _ => { panic!("Expected an Sexp::List, but got {}", line)}
         }
     }
+    fn process_avoid(&mut self, l: Vec<Sexp>) -> () {
+        match &l[1] {
+            Sexp::String(res) => { self.cost.insert(res.clone(), 10000.); }
+            _ => { panic!("assert expects list") }
+        }
+
+    }
+
 
     fn process_assert(&mut self, l: Vec<Sexp>) -> () {
         match &l[1] {
@@ -234,10 +251,12 @@ impl Server {
 
         // We now want to give back the results
         let result = expr.search(&self.runner.egraph);
-         let extractor = Extractor::new(&self.runner.egraph, MotivateTrue);
+        let extractor = Extractor::new(&self.runner.egraph, MotivateTrue{motivated: &self.cost});
         let path = "./coquetier_proof_output.txt";
         let f = File::create(path).expect("unable to create file");
         let mut writer = BufWriter::new(f);
+
+        println!("Start listing potential results"); 
         for search_match in &result {
             println!("Found evars candidates"); 
             for subst in &search_match.substs {
@@ -274,12 +293,12 @@ impl Server {
         println!("Dumping the egraph took {dump_time:.3}s");
        
 
-        let extractor = Extractor::new(&self.runner.egraph, MotivateTrue);
+        let extractor = Extractor::new(&self.runner.egraph, MotivateTrue{motivated: &self.cost});
         let (best_cost, best) = extractor.find_best(root);
         println!("Simplified\n{}\nto\n{}\nwith cost {}", expr, best, best_cost);
         let mut ctor_equals = None;
 
-        if best_cost != 4.0 {
+        if best_cost != 6.0 {
             // Only if we failed to simplify to True (only expression of cost equal to one)
             // then check try to find an inconsistency. This allow us to use
             // Coquetier to generate the proof of equality between the two distinct

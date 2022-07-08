@@ -269,7 +269,7 @@ impl<'a, L: Language> SearchMatches<'a, L> {
         searcher: &std::sync::Arc<dyn Searcher<L, N> + Sync + Send>,
         max_ffn: Ffn
     ) -> () {
-        //self.ffns.resize(self.substs.len(), 0); // <-- to disable ffn restrictions
+        // self.ffns.resize(self.substs.len(), 0); // <-- to disable ffn restrictions
         let all_substs = self.substs.clone();
         self.substs.clear();
         for subst in all_substs {

@@ -2,6 +2,7 @@ use symbolic_expressions::*;
 use std::io::{Write};
 use crate::*;
 
+/// Remove typer annotations and add "hole" in case of explanations
 pub fn holify_aux(e: &Sexp) -> Sexp {
     match e {
         Sexp::String(s) => Sexp::String(s.replace("AT", "@").replace("DOT", ".")),
@@ -101,7 +102,7 @@ fn holify(lemma_arity: &dyn Fn(&str) -> usize, e: &Sexp) -> (Sexp, bool, String,
     }
 }
 
-//  Return two terms that staret with distinct constructors but are in the same eclass
+///  Return two terms that start with distinct constructors but are in the same eclass
 pub fn find_distinct_ctor_equals<L: Language + std::fmt::Display, N: Analysis<L>>(eg: &EGraph<L, N>) -> Option<(String, String)> {
     let extractor = Extractor::new(eg, AstSize);
     let classes : Vec<&EClass<L, _>> = eg.classes().collect();
@@ -154,16 +155,22 @@ pub fn find_distinct_ctor_equals<L: Language + std::fmt::Display, N: Analysis<L>
     return None;
 }
 
-pub struct MotivateTrue;
-impl CostFunction<SymbolLang> for MotivateTrue {
+/// Cost of terms to control simplification
+pub struct MotivateTrue<'a>{
+    pub motivated: &'a HashMap<String, f64>
+}
+
+impl CostFunction<SymbolLang> for MotivateTrue<'_> {
     type Cost = f64;
     fn cost<C>(&mut self, enode: &SymbolLang, mut costs: C) -> Self::Cost
     where
         C: FnMut(Id) -> Self::Cost
     {
-        let op_cost = if *enode == SymbolLang::leaf("&True") { 1.0 } else 
-                           if *enode == SymbolLang::leaf("&Prop") { 1.0 } else { 2.0 };
-        enode.fold(op_cost, |sum, id| sum + costs(id))
+        let op_cost = self.motivated.get(&enode.op.to_string()).unwrap_or(&4.0);
+        // let op_cost = if *enode == SymbolLang::leaf("&True") { 1.0 } else 
+        //                    if *enode == SymbolLang::leaf("&Prop") { 1.0 } else 
+        //                    { 2.0 };
+        enode.fold(*op_cost, |sum, id| sum + costs(id))
     }
 }
 

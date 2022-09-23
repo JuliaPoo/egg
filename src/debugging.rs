@@ -40,7 +40,6 @@ pub fn print_eclasses_to_file<L: Language + std::fmt::Display, N: Analysis<L>>(e
     let f = File::create(path).expect("unable to create file");
     let mut writer = BufWriter::new(f);
     print_eclasses_to_writer(eg, &mut writer);
-    println!("Wrote egraph to {path}");
 }
 
 

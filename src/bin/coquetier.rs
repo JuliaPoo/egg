@@ -69,17 +69,18 @@ impl Rule {
             }
             patterns.extend(multipattern_part("?$lhs", &self.conclusion_lhs));
             let searcher: MultiPattern<SymbolLang> = MultiPattern::new(patterns);
-            println!("{}: {} => {}", self.rulename, searcher, applier);
+            // println!("{}: {} => {}", self.rulename, searcher, applier);
             Rewrite::new(self.rulename.clone(), searcher, applier).unwrap()
         } else {
             let searcher: Pattern<SymbolLang> = self.conclusion_lhs.to_string().parse::<Pattern<SymbolLang>>().unwrap();
-            println!("{}: {} => {}", self.rulename, searcher, applier);
+            // println!("{}: {} => {}", self.rulename, searcher, applier);
             Rewrite::new(self.rulename.clone(), searcher, applier).unwrap()
         }
     }
 }
 
 struct Server {
+    verbose : bool,
     rules: Vec<Rule>,
     runner: Runner<SymbolLang, ()>,
     cost: HashMap<String, f64,  fxhash::FxBuildHasher>,
@@ -91,6 +92,7 @@ impl Server {
         c.insert("&True".to_string(),1.0);
         c.insert("&Prop".to_string(),1.0);
         Self { 
+            verbose : false,
             rules: Default::default(), 
             runner: Runner::default()
                 .with_explanations_enabled()
@@ -98,6 +100,10 @@ impl Server {
                 .with_time_limit(instant::Duration::from_secs(10)),
             cost: c 
         }
+    }
+
+    pub fn verbose(&self) -> bool {
+        return self.verbose;
     }
 
     fn process_line(&mut self, line: Sexp) -> () {
@@ -240,13 +246,13 @@ impl Server {
         let t = Instant::now();
         self.runner.run_nonchained(rewrites.iter());
         let saturation_time = t.elapsed().as_secs_f64();
-        println!("Saturation took {saturation_time:.3}s");
+        if self.verbose { println!("Saturation took {saturation_time:.3}s"); }
         self.runner.print_report();
         
         let t = Instant::now();
         print_eclasses_to_file(&self.runner.egraph, "./coq_eclasses_log.txt");
         let dump_time = t.elapsed().as_secs_f64();
-        println!("Dumping the egraph took {dump_time:.3}s");
+        if self.verbose { println!("Dumping the egraph took {dump_time:.3}s"); }
        
 
         // We now want to give back the results
@@ -256,9 +262,9 @@ impl Server {
         let f = File::create(path).expect("unable to create file");
         let mut writer = BufWriter::new(f);
 
-        println!("Start listing potential results"); 
+        if self.verbose { println!("Start listing potential results"); }
         for search_match in &result {
-            println!("Found evars candidates"); 
+            if self.verbose { println!("Found evars candidates"); }
             for subst in &search_match.substs {
                 writeln!(writer, "(* Substitution suggested *)").expect("failed to write to writer");
                 for (var,id) in &subst.vec {
@@ -270,7 +276,7 @@ impl Server {
                 }
             }
         } 
-        println!("Wrote proof to {path}"); 
+        if self.verbose { println!("Wrote proof to {path}"); }
     }
 
     // l = ["minimize", expr, ffn_limit]
@@ -283,19 +289,19 @@ impl Server {
         let t = Instant::now();
         self.runner.run_nonchained(rewrites.iter());
         let saturation_time = t.elapsed().as_secs_f64();
-        println!("Saturation took {saturation_time:.3}s");
+        if self.verbose { println!("Saturation took {saturation_time:.3}s"); }
         self.runner.print_report();
         
         let root = *self.runner.roots.last().unwrap();
         let t = Instant::now();
         print_eclasses_to_file(&self.runner.egraph, "./coq_eclasses_log.txt");
         let dump_time = t.elapsed().as_secs_f64();
-        println!("Dumping the egraph took {dump_time:.3}s");
+        if self.verbose { println!("Dumping the egraph took {dump_time:.3}s"); }
        
 
         let extractor = Extractor::new(&self.runner.egraph, MotivateTrue{motivated: &self.cost});
         let (best_cost, best) = extractor.find_best(root);
-        println!("Simplified\n{}\nto\n{}\nwith cost {}", expr, best, best_cost);
+        // println!("Simplified\n{}\nto\n{}\nwith cost {}", expr, best, best_cost);
         let mut ctor_equals = None;
 
         if best_cost != 6.0 {
@@ -311,10 +317,10 @@ impl Server {
                 let exprt1 : RecExpr<SymbolLang>= t1.parse().unwrap();
                 let exprt2 : RecExpr<SymbolLang>= t2.parse().unwrap();
                 
-                println!("Absurd found the following contradiction: {} {}", exprt1, exprt2);
+                // println!("Absurd found the following contradiction: {} {}", exprt1, exprt2);
                 let explanations = self.runner.explain_equivalence(&exprt1, &exprt2).get_flat_sexps();
                 let expl_time = t.elapsed().as_secs_f64();
-                println!("Absurd found Explanation length: {} (took {:.3}s to generate)", explanations.len(), expl_time);
+                // println!("Absurd found Explanation length: {} (took {:.3}s to generate)", explanations.len(), expl_time);
 
                 let path = "./coquetier_proof_output.txt";
                 let f = File::create(path).expect("unable to create file");
@@ -334,7 +340,7 @@ impl Server {
                     &mut writer, 
                     &|name| self.is_eq(name), 
                     &|name| self.lemma_arity(name));
-                println!("Wrote proof to {path}"); }
+                if self.verbose { println!("Wrote proof to {path}"); }}
             None => {
                 let t = Instant::now();
                 let explanations = self.runner.explain_equivalence(&expr, &best).get_flat_sexps();
@@ -355,7 +361,7 @@ impl Server {
                     &mut writer, 
                     &|name| self.is_eq(name), 
                     &|name| self.lemma_arity(name));
-                println!("Wrote proof to {path}"); }
+                if self.verbose { println!("Wrote proof to {path}"); }}
         }
     }
 
@@ -383,5 +389,5 @@ fn main() {
         server.run_on_reader(&mut reader);
     }
     let main_time = t.elapsed().as_secs_f64();
-    println!("coquetier's main() function took {main_time}s");
+    if server.verbose() { println!("coquetier's main() function took {main_time}s"); }
 }

@@ -246,8 +246,11 @@ impl Server {
         let t = Instant::now();
         self.runner.run_nonchained(rewrites.iter());
         let saturation_time = t.elapsed().as_secs_f64();
-        if self.verbose { println!("Saturation took {saturation_time:.3}s"); }
-        self.runner.print_report();
+        if self.verbose { 
+            println!("Saturation took {saturation_time:.3}s");
+            self.runner.print_report();
+        }
+     
         
         let t = Instant::now();
         print_eclasses_to_file(&self.runner.egraph, "./coq_eclasses_log.txt");
@@ -289,8 +292,10 @@ impl Server {
         let t = Instant::now();
         self.runner.run_nonchained(rewrites.iter());
         let saturation_time = t.elapsed().as_secs_f64();
-        if self.verbose { println!("Saturation took {saturation_time:.3}s"); }
-        self.runner.print_report();
+        if self.verbose { 
+            println!("Saturation took {saturation_time:.3}s"); 
+            self.runner.print_report();
+        }
         
         let root = *self.runner.roots.last().unwrap();
         let t = Instant::now();
@@ -345,7 +350,7 @@ impl Server {
                 let t = Instant::now();
                 let explanations = self.runner.explain_equivalence(&expr, &best).get_flat_sexps();
                 let expl_time = t.elapsed().as_secs_f64();
-                println!("Explanation length: {} (took {:.3}s to generate)", explanations.len(), expl_time);
+                if self.verbose { println!("Explanation length: {} (took {:.3}s to generate)", explanations.len(), expl_time); }
 
                 let path = "./coquetier_proof_output.txt";
                 let f = File::create(path).expect("unable to create file");

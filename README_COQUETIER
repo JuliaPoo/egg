@@ -1,0 +1,7 @@
+Build the coquetier:
+
+
+	cargo build --release --bin coquetier
+
+
+Set a symlink between /opt/link_to_egg and the folder $ROOT/coq/Coquetier/egg

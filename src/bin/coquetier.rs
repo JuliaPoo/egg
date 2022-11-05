@@ -371,6 +371,9 @@ impl Server {
     }
 
     pub fn run_on_reader(&mut self, reader: &mut dyn BufRead) -> () {
+        // Add a generic type embedding collapse
+        let sexp = symbolic_expressions::parser::parse_str("(assert(!(forall((?t $U) (?x $T) (?y $T)) (=> (= (annot ?x ?t) (annot ?y ?t)) (= ?x ?y))) :named eggTypeEmbedding))").unwrap();
+        self.process_line(sexp);
         loop {
             let mut buffer = String::new();
             let bytes_read = reader.read_line(&mut buffer).expect("failed to read line from stdin");

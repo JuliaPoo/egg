@@ -184,7 +184,7 @@ pub fn print_equality_proof_to_writer<W: Write>(
     writeln!(writer, "unshelve (");
     for exp in explanation {
         let (holified, fw, name_th, applied_th, new) = holify(lemma_arity, exp);
-        if name_th != "eggTypeEmbedding" {
+        // if name_th != "eggTypeEmbedding" {
             let rw_lemma = if fw { "@rew_zoom_fw" } else { "@rew_zoom_bw" };
             //  let th = format!("{applied_th}") ;
             let th = if is_eq(&name_th.to_string()).unwrap() { 
@@ -198,7 +198,7 @@ pub fn print_equality_proof_to_writer<W: Write>(
             else {
                 writeln!(writer, "eapply ({rw_lemma} _ {new} _ {th} (fun hole => {holified}));");
             }
-        }
+        // }
     }
     writeln!(writer, "idtac).");
     writer.flush().expect("error flushing");

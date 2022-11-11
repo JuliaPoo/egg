@@ -3,6 +3,7 @@
 use egg::*;
 use std::io;
 use std::time::Instant;
+use std::env;
 use symbolic_expressions::*;
 use std::convert::TryInto;
 use std::str::FromStr;
@@ -81,18 +82,22 @@ impl Rule {
 
 struct Server {
     verbose : bool,
+    infile : String,
+    outfile : String,
     rules: Vec<Rule>,
     runner: Runner<SymbolLang, ()>,
     cost: HashMap<String, f64,  fxhash::FxBuildHasher>,
 }
 
 impl Server {
-    pub fn new() -> Self {
-        let mut c:HashMap<String, f64,  fxhash::FxBuildHasher> = Default::default();
+    pub fn new(infile: String, outfile:String) -> Self {
+    let mut c:HashMap<String, f64,  fxhash::FxBuildHasher> = Default::default();
         c.insert("&True".to_string(),1.0);
         c.insert("&Prop".to_string(),1.0);
         Self { 
             verbose : false,
+            infile: infile,
+            outfile: outfile,
             rules: Default::default(), 
             runner: Runner::default()
                 .with_explanations_enabled()
@@ -253,7 +258,10 @@ impl Server {
      
         
         let t = Instant::now();
-        print_eclasses_to_file(&self.runner.egraph, "./coq_eclasses_log.txt");
+        if self.verbose {
+            let dumppath = format!("{}.dump", self.infile); 
+            print_eclasses_to_file(&self.runner.egraph, &dumppath);
+        }
         let dump_time = t.elapsed().as_secs_f64();
         if self.verbose { println!("Dumping the egraph took {dump_time:.3}s"); }
        
@@ -261,7 +269,7 @@ impl Server {
         // We now want to give back the results
         let result = expr.search(&self.runner.egraph);
         let extractor = Extractor::new(&self.runner.egraph, MotivateTrue{motivated: &self.cost});
-        let path = "./coquetier_proof_output.txt";
+        let path = &self.outfile; 
         let f = File::create(path).expect("unable to create file");
         let mut writer = BufWriter::new(f);
 
@@ -299,7 +307,10 @@ impl Server {
         
         let root = *self.runner.roots.last().unwrap();
         let t = Instant::now();
-        print_eclasses_to_file(&self.runner.egraph, "./coq_eclasses_log.txt");
+        if self.verbose {
+            let dumppath = format!("{}.dump", self.infile); 
+            print_eclasses_to_file(&self.runner.egraph, &dumppath);
+        }
         let dump_time = t.elapsed().as_secs_f64();
         if self.verbose { println!("Dumping the egraph took {dump_time:.3}s"); }
        
@@ -327,7 +338,7 @@ impl Server {
                 let expl_time = t.elapsed().as_secs_f64();
                 // println!("Absurd found Explanation length: {} (took {:.3}s to generate)", explanations.len(), expl_time);
 
-                let path = "./coquetier_proof_output.txt";
+                let path = &self.outfile; 
                 let f = File::create(path).expect("unable to create file");
                 let mut writer = BufWriter::new(f);
 
@@ -352,7 +363,8 @@ impl Server {
                 let expl_time = t.elapsed().as_secs_f64();
                 if self.verbose { println!("Explanation length: {} (took {:.3}s to generate)", explanations.len(), expl_time); }
 
-                let path = "./coquetier_proof_output.txt";
+                let path = &self.outfile; 
+                // let path = "./coquetier_proof_output.txt";
                 let f = File::create(path).expect("unable to create file");
                 let mut writer = BufWriter::new(f);
 
@@ -385,14 +397,18 @@ impl Server {
 }
 
 fn main() {
+    let args: Vec<String> = env::args().collect();
+    let infile = &args[1];
+    let outfile = &args[2];
     let t = Instant::now();
     env_logger::init();
-    let mut server = Server::new();
+    let mut server = Server::new(infile.to_string(), outfile.to_string());
     let use_stdin = false;
     if use_stdin {
         server.run_on_reader(&mut io::stdin().lock());
     } else {
-        let file = File::open("./coquetier_input.smt2").unwrap();
+        let path = infile; 
+        let file = File::open(path).unwrap();
         let mut reader = io::BufReader::new(file);
         server.run_on_reader(&mut reader);
     }

@@ -9,33 +9,33 @@ use ::serde::{Deserialize, Serialize};
 
 use log::*;
 
-/// Far-fetched-ness values
-pub type Ffn = u8;
+// /// Far-fetched-ness values
+// pub type Ffn = u8;
 
-#[allow(missing_docs)]
-pub fn ffn_max(a: Ffn, b: Ffn) -> Ffn {
-    u8::max(a, b)
-}
+// #[allow(missing_docs)]
+// pub fn ffn_max(a: Ffn, b: Ffn) -> Ffn {
+//     u8::max(a, b)
+// }
 
-#[allow(missing_docs)]
-pub fn ffn_min(a: Ffn, b: Ffn) -> Ffn {
-    u8::min(a, b)
-}
+// #[allow(missing_docs)]
+// pub fn ffn_min(a: Ffn, b: Ffn) -> Ffn {
+//     u8::min(a, b)
+// }
 
-#[allow(missing_docs)]
-pub fn ffn_zero() -> Ffn {
-    0
-}
+// #[allow(missing_docs)]
+// pub fn ffn_zero() -> Ffn {
+//     0
+// }
 
-#[allow(missing_docs)]
-pub fn ffn_increase(a: Ffn) -> Ffn {
-    a + 1
-}
+// #[allow(missing_docs)]
+// pub fn ffn_increase(a: Ffn) -> Ffn {
+//     a + 1
+// }
 
-#[allow(missing_docs)]
-pub fn ffn_infinity() -> Ffn {
-    255
-}
+// #[allow(missing_docs)]
+// pub fn ffn_infinity() -> Ffn {
+//     255
+// }
 
 
 /** A data structure to keep track of equalities between expressions.
@@ -114,14 +114,7 @@ pub struct EGraph<L: Language, N: Analysis<L>> {
     #[cfg_attr(feature = "serde-1", serde(skip))]
     pub clean: bool,
 
-    /// Stores the far-fetched-ness of each enode, which is defined as follows:
-    /// - enodes appearing in exprs that were added as initial expressions
-    ///   (using Runner.with_expr) have farfetchedness 0.
-    /// - whenever an rewrite adds new enodes (by instantiating an applier (rhs) pattern),
-    ///   all new enodes have their farfetchedness set to the farfetchedness of the
-    ///   instantiated searcher (lhs) pattern plus the cost of the rule, which currently equals
-    ///   1 for all rules.
-    pub farfetchedness: HashMap<Id, Ffn>,
+   
 }
 
 #[cfg(feature = "serde-1")]
@@ -157,8 +150,7 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
             pending: Default::default(),
             memo: Default::default(),
             analysis_pending: Default::default(),
-            classes_by_op: Default::default(),
-            farfetchedness: Default::default(),
+            classes_by_op: Default::default()
         }
     }
 
@@ -257,8 +249,10 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
         // let left = self.lookup_expr(left).expect("left expr not found, use add_expr before calling explain_equivalence");
         // let right = self.lookup_expr(right).expect("right expr not found, use add_expr before calling explain_equivalence");
         // TODO this should not require an ffn value!
-        let left = self.add_expr_internal(left, ffn_zero());
-        let right = self.add_expr_internal(right, ffn_zero());
+        let left = self.add_expr_internal(left);
+        // let left = self.add_expr_internal(left, ffn_zero());
+        // let right = self.add_expr_internal(right, ffn_zero());
+        let right = self.add_expr_internal(right);
         if let Some(explain) = &mut self.explain {
             explain.explain_equivalence(left, right)
         } else {
@@ -395,19 +389,20 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
     ///
     /// [`add_expr`]: EGraph::add_expr()
     pub fn add_expr(&mut self, expr: &RecExpr<L>) -> Id {
-        let id = self.add_expr_internal(expr, ffn_zero());
+        let id = self.add_expr_internal(expr);
         self.find(id)
     }
 
     /// Adds an expr to the egraph, and returns the uncanonicalized id of the top enode.
-    fn add_expr_internal(&mut self, expr: &RecExpr<L>, ffn: Ffn) -> Id {
+    // fn add_expr_internal(&mut self, expr: &RecExpr<L>, ffn: Ffn) -> Id {
+    fn add_expr_internal(&mut self, expr: &RecExpr<L>) -> Id {
         let nodes = expr.as_ref();
         let mut new_ids = Vec::with_capacity(nodes.len());
         let mut new_node_q = Vec::with_capacity(nodes.len());
         for node in nodes {
             let new_node = node.clone().map_children(|i| new_ids[usize::from(i)]);
             let size_before = self.unionfind.size();
-            let next_id = self.add_internal(new_node, ffn);
+            let next_id = self.add_internal(new_node);
             if self.unionfind.size() > size_before {
                 new_node_q.push(true);
             } else {
@@ -428,12 +423,12 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
 
     /// Adds a [`Pattern`] and a substitution to the [`EGraph`], returning
     /// the eclass of the instantiated pattern.
-    pub fn add_instantiation(&mut self, pat: &PatternAst<L>, subst: &Subst, ffn: Ffn) -> Id {
-        let id = self.add_instantiation_internal(pat, subst, ffn);
+    pub fn add_instantiation(&mut self, pat: &PatternAst<L>, subst: &Subst) -> Id {
+        let id = self.add_instantiation_internal(pat, subst);
         self.find(id)
     }
 
-    fn add_instantiation_internal(&mut self, pat: &PatternAst<L>, subst: &Subst, ffn: Ffn) -> Id {
+    fn add_instantiation_internal(&mut self, pat: &PatternAst<L>, subst: &Subst) -> Id {
         let nodes = pat.as_ref();
         let mut new_ids = Vec::with_capacity(nodes.len());
         let mut new_node_q = Vec::with_capacity(nodes.len());
@@ -447,7 +442,7 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
                 ENodeOrVar::ENode(node) => {
                     let new_node = node.clone().map_children(|i| new_ids[usize::from(i)]);
                     let size_before = self.unionfind.size();
-                    let next_id = self.add_internal(new_node, ffn);
+                    let next_id = self.add_internal(new_node);
                     if self.unionfind.size() > size_before {
                         new_node_q.push(true);
                     } else {
@@ -542,24 +537,25 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
     ///
     /// [`add`]: EGraph::add()
     pub fn add(&mut self, enode: L) -> Id {
-        self.add_with_farfetchedness(enode, ffn_zero())
+        self.add_with_farfetchedness(enode)
     }
 
     #[allow(missing_docs)]
-    pub fn add_with_farfetchedness(&mut self, enode: L, ffn: Ffn) -> Id {
-        let id = self.add_internal(enode, ffn);
+    pub fn add_with_farfetchedness(&mut self, enode: L) -> Id {
+        let id = self.add_internal(enode);
         self.find(id)
     }
 
     /// Adds an enode to the egraph and also returns the the enode's id (uncanonicalized).
-    fn add_internal(&mut self, enode: L, ffn: Ffn) -> Id {
+    // fn add_internal(&mut self, enode: L, ffn: Ffn) -> Id {
+    fn add_internal(&mut self, enode: L) -> Id {
         let id = self.add_internal_without_ffn(enode);
-        if let Some(ffn_ptr) = self.farfetchedness.get_mut(&id) {
-            *ffn_ptr = ffn_min(ffn, *ffn_ptr);
-        } else {
-            //println!("Enode {id} has far-fetched-ness {ffn}");
-            self.farfetchedness.insert(id, ffn);
-        }
+        // if let Some(ffn_ptr) = self.farfetchedness.get_mut(&id) {
+        //     *ffn_ptr = ffn_min(ffn, *ffn_ptr);
+        // } else {
+        //     //println!("Enode {id} has far-fetched-ness {ffn}");
+        //     // self.farfetchedness.insert(id, ffn);
+        // }
         id
     }
 
@@ -648,54 +644,10 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
     }
 
     /// Returns the far-fetched-ness of an enode
-    pub fn ffn_of_enode(&self, enode: &L) -> Option<&Ffn> {
-        if let Some(id) = self.lookup_internal(enode.clone()) {
-            self.farfetchedness.get(&id)
-        } else {
-            None
-        }
-    }
-
-    fn min_ffn_of_class(&self, eclass_id: Id) -> Ffn {
-        let mut current_min = ffn_infinity();
-        if let Some(eclass) = self.classes.get(&eclass_id) {
-            for enode in eclass.nodes.iter() {
-                let enode_id = self.memo.get(enode).unwrap();
-                current_min = ffn_min(current_min, *self.farfetchedness.get(enode_id).unwrap());
-            }
-        } else {
-            panic!("eclass_id {} not found", eclass_id);
-        }
-        return current_min;
-    }
 
     /// Given a pattern `pat`, which, when instantiated with substitution `subst`,
     /// already is part of the egraph, return the biggest farfetchedness of any enode
     /// appearing in the instantiated pattern
-    pub fn max_ffn_of_instantiated_pattern(&self, pat: &PatternAst<L>, subst: &Subst) -> Ffn {
-        let nodes = pat.as_ref();
-        let mut instantiated_ids = Vec::with_capacity(nodes.len());
-        let mut current_max = ffn_zero();
-        for node in nodes {
-            match node {
-                ENodeOrVar::Var(var) => {
-                    let id_0 = subst[*var];
-                    let id = self.find(id_0);
-                    // This seems to happen indeed *if* we run this function on a dirty (ie non-rebuilt) egraph:
-                    // if id_0 != id { println!("Note: id {id_0} in subst was not canonical, its canonical id is {id}"); }
-                    instantiated_ids.push(id);
-                    current_max = ffn_max(current_max, self.min_ffn_of_class(id));
-                }
-                ENodeOrVar::ENode(node) => {
-                    let instantiated_node = node.clone().map_children(|i| instantiated_ids[usize::from(i)]);
-                    let id_noncanonical = self.lookup_internal(instantiated_node).unwrap();
-                    instantiated_ids.push(self.find(id_noncanonical));
-                    current_max = ffn_max(current_max, *self.farfetchedness.get(&id_noncanonical).unwrap());
-                }
-            }
-        }
-        current_max
-    }
 
     /// Given two patterns and a substitution, add the patterns
     /// and union them.
@@ -711,11 +663,10 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
         to_pat: &PatternAst<L>,
         subst: &Subst,
         rule_name: impl Into<Symbol>,
-        ffn: Ffn
     ) -> (Id, bool) {
-        let id1 = self.add_instantiation_internal(from_pat, subst, ffn); // TODO why is this not just a lookup?
+        let id1 = self.add_instantiation_internal(from_pat, subst); // TODO why is this not just a lookup?
         let size_before = self.unionfind.size();
-        let id2 = self.add_instantiation_internal(to_pat, subst, ffn);
+        let id2 = self.add_instantiation_internal(to_pat, subst);
         let rhs_new = self.unionfind.size() > size_before;
         let did_union = self.perform_union(
             id1,
@@ -1109,8 +1060,7 @@ mod tests {
             &"x".parse().unwrap(),
             &"y".parse().unwrap(),
             &Default::default(),
-            "union x and y".to_string(),
-            ffn_zero()
+            "union x and y".to_string()
         );
         egraph.rebuild();
     }

@@ -5,7 +5,7 @@ use std::io;
 use std::time::Instant;
 use std::env;
 use symbolic_expressions::*;
-use std::convert::TryInto;
+// use std::convert::TryInto;
 use std::str::FromStr;
 use std::fs::File;
 use std::io::{BufWriter, Write, BufRead};
@@ -95,12 +95,14 @@ impl Server {
         c.insert("&True".to_string(),1.0);
         c.insert("&Prop".to_string(),1.0);
         Self { 
-            // verbose : true,
-            verbose : false,
+            verbose : true,
+            //verbose : false,
+
             infile: infile,
             outfile: outfile,
             rules: Default::default(), 
             runner: Runner::default()
+                .with_iter_limit(7)
                 .with_explanations_enabled()
                 .with_node_limit(10000)
                 .with_time_limit(instant::Duration::from_secs(10)),
@@ -246,8 +248,8 @@ impl Server {
 
     fn process_search(&mut self, l: Vec<Sexp>) -> () {
         let expr: Pattern<SymbolLang> = l[1].to_string().parse().unwrap();
-        let ffn_limit: Ffn = l[2].i().unwrap().try_into().unwrap();
-        self.runner.ffn_limit = ffn_limit;
+        // let ffn_limit: Ffn = l[2].i().unwrap().try_into().unwrap();
+        // self.runner.ffn_limit = ffn_limit;
         let rewrites: Vec<Rewrite<SymbolLang, ()>> = self.rules.iter().map(|r| r.to_rewrite()).collect();
         let t = Instant::now();
         self.runner.run_nonchained(rewrites.iter());
@@ -295,8 +297,8 @@ impl Server {
     fn process_minimize(&mut self, l: Vec<Sexp>) -> () {
         let expr: RecExpr<SymbolLang> = l[1].to_string().parse().unwrap();
         self.runner.add_expr(&expr);
-        let ffn_limit: Ffn = l[2].i().unwrap().try_into().unwrap();
-        self.runner.ffn_limit = ffn_limit;
+        // let ffn_limit: Ffn = l[2].i().unwrap().try_into().unwrap();
+        // self.runner.ffn_limit = ffn_limit;
         let rewrites: Vec<Rewrite<SymbolLang, ()>> = self.rules.iter().map(|r| r.to_rewrite()).collect();
         let t = Instant::now();
         self.runner.run_nonchained(rewrites.iter());
@@ -336,7 +338,7 @@ impl Server {
                 
                 // println!("Absurd found the following contradiction: {} {}", exprt1, exprt2);
                 let explanations = self.runner.explain_equivalence(&exprt1, &exprt2).get_flat_sexps();
-                let expl_time = t.elapsed().as_secs_f64();
+                // let expl_time = t.elapsed().as_secs_f64();
                 // println!("Absurd found Explanation length: {} (took {:.3}s to generate)", explanations.len(), expl_time);
 
                 let path = &self.outfile; 

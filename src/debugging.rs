@@ -24,11 +24,13 @@ pub fn print_eclasses_to_writer<W: Write, L: Language + std::fmt::Display, N: An
                 let (_best_cost, best) = extractor.find_best(*child);
                 s.push_str(&format!(" {}", best));
             }
-            let ffn = &eg.ffn_of_enode(node).unwrap();
+            // let ffn = &eg.ffn_of_enode(node).unwrap();
             if node.children().is_empty() {
-                writeln!(w, "- [{ffn}] {s}");
+                // writeln!(w, "- [{ffn}] {s}");
+                writeln!(w, "- {s}");
             } else {
-                writeln!(w, "- [{ffn}] ({s})");
+                // writeln!(w, "- [{ffn}] ({s})");
+                writeln!(w, "- {s}");
             }
         }
     }

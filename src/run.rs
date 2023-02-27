@@ -158,7 +158,6 @@ pub struct Runner<L: Language, N: Analysis<L>, IterData = ()> {
     node_limit: usize,
     time_limit: Duration,
     /// far-fetched-ness limit
-    pub ffn_limit: Ffn,
 
     start_time: Option<Instant>,
     scheduler: Box<dyn RewriteScheduler<L, N>>,
@@ -191,7 +190,6 @@ where
             iter_limit,
             node_limit,
             time_limit,
-            ffn_limit,
             start_time,
             scheduler: _,
         } = self;
@@ -205,7 +203,6 @@ where
             .field("iter_limit", iter_limit)
             .field("node_limit", node_limit)
             .field("time_limit", time_limit)
-            .field("ffn_limit",  ffn_limit)
             .field("start_time", start_time)
             .field("scheduler", &format_args!("<dyn RewriteScheduler ..>"))
             .finish()
@@ -323,7 +320,6 @@ where
             iter_limit: 30,
             node_limit: 10_000,
             time_limit: Duration::from_secs(5),
-            ffn_limit: 2,
 
             egraph: EGraph::new(analysis),
             roots: vec![],
@@ -350,12 +346,6 @@ where
     pub fn with_time_limit(self, time_limit: Duration) -> Self {
         Self { time_limit, ..self }
     }
-
-    /// Sets the maximum tolerable far-fetched-ness value for newly added terms
-    pub fn with_ffn_limit(self, ffn_limit: Ffn) -> Self {
-        Self { ffn_limit, ..self }
-    }
-
     /// Add a hook to instrument or modify the behavior of a [`Runner`].
     /// Each hook will run at the beginning of each iteration, i.e. before
     /// all the rewrites.
@@ -587,7 +577,6 @@ where
 // MULTICORE version
 
         let egraph = &self.egraph;
-        let ffnlimit = self.ffn_limit;
         // let (tx, rx) = mpsc::channel();
         // let iter_r = rules.iter();
         let l = rules.len();
@@ -598,7 +587,7 @@ where
                     let mut ms = rules[i].search(egraph);
                     for search_matches in ms.iter_mut() {
                         //print!("Length before: {}, ", search_matches.substs.len());
-                        search_matches.compute_and_filter_ffns(egraph, &rules[i].searcher, ffnlimit);
+                        search_matches.compute_and_filter_ffns(egraph, &rules[i].searcher);
                         //println!("length after shrinking: {}", search_matches.substs.len());
                     }
                     ms

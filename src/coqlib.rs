@@ -156,7 +156,9 @@ pub fn find_distinct_ctor_equals<L: Language + std::fmt::Display, N: Analysis<L>
 }
 
 /// Cost of terms to control simplification
+#[warn(missing_docs)]
 pub struct MotivateTrue<'a>{
+#[warn(missing_docs)]
     pub motivated: &'a HashMap<String, f64>
 }
 

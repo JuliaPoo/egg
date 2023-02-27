@@ -17,6 +17,7 @@ pub struct Var(Symbol);
 #[derive(Debug, Error)]
 pub enum VarParseError {
     #[error("pattern variable {0:?} should have a leading question mark")]
+    #[warn(missing_docs)]
     MissingQuestionMark(String),
 }
 
@@ -46,9 +47,9 @@ impl Debug for Var {
     }
 }
 
+#[derive(Default, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 /// A substitition mapping [`Var`]s to eclass [`Id`]s.
 ///
-#[derive(Default, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Subst {
     pub vec: smallvec::SmallVec<[(Var, Id); 3]>,
 }

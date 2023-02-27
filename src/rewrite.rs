@@ -130,8 +130,8 @@ where
     /// This should not return a SearchMatches with no substs.
     fn search_eclass(&self, egraph: &EGraph<L, N>, eclass: Id) -> Option<SearchMatches<L>>;
 
-    /// Computes the far-fetchedness of this pattern when instantiated with `subst`
-    fn ffn_of_subst(&self, egraph: &EGraph<L, N>, subst: &Subst) -> Ffn;
+    // /// Computes the far-fetchedness of this pattern when instantiated with `subst`
+    // fn ffn_of_subst(&self, egraph: &EGraph<L, N>, subst: &Subst) -> Ffn;
 
     /// Search the whole [`EGraph`], returning a list of all the
     /// [`SearchMatches`] where something was found.
@@ -290,8 +290,8 @@ where
             } else {
                 None
             };
-            for (subst, ffn) in mat.substs.iter().zip(mat.ffns.iter()) {
-                let ids = self.apply_one(egraph, mat.eclass, subst, ast, rule_name, *ffn);
+            for subst in mat.substs.iter(){
+                let ids = self.apply_one(egraph, mat.eclass, subst, ast, rule_name);
                 added.extend(ids)
             }
         }
@@ -321,8 +321,7 @@ where
         eclass: Id,
         subst: &Subst,
         searcher_ast: Option<&PatternAst<L>>,
-        rule_name: Symbol,
-        ffn: egraph::Ffn,
+        rule_name: Symbol
     ) -> Vec<Id>;
 
     /// Returns a list of variables that this Applier assumes are bound.
@@ -372,12 +371,11 @@ where
         eclass: Id,
         subst: &Subst,
         searcher_ast: Option<&PatternAst<L>>,
-        rule_name: Symbol,
-        ffn: egraph::Ffn,
+        rule_name: Symbol
     ) -> Vec<Id> {
         if self.condition.check(egraph, eclass, subst) {
             self.applier
-                .apply_one(egraph, eclass, subst, searcher_ast, rule_name, ffn)
+                .apply_one(egraph, eclass, subst, searcher_ast, rule_name)
         } else {
             vec![]
         }
@@ -523,8 +521,7 @@ mod tests {
             &"(is-power2 2)".parse().unwrap(),
             &"TRUE".parse().unwrap(),
             &Default::default(),
-            "direct-union".to_string(),
-            egraph::ffn_zero(),
+            "direct-union".to_string()
         );
 
         println!("Should fire now");
@@ -559,8 +556,7 @@ mod tests {
                 eclass: Id,
                 subst: &Subst,
                 searcher_ast: Option<&PatternAst<SymbolLang>>,
-                rule_name: Symbol,
-                ffn: egraph::Ffn,
+                rule_name: Symbol
             ) -> Vec<Id> {
                 let a: Var = "?a".parse().unwrap();
                 let b: Var = "?b".parse().unwrap();
@@ -572,8 +568,7 @@ mod tests {
                         ast,
                         &PatternAst::from_str(&s).unwrap(),
                         subst,
-                        rule_name,
-                        ffn
+                        rule_name
                     );
                     if did_something {
                         vec![id]

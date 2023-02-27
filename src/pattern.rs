@@ -255,7 +255,7 @@ pub struct SearchMatches<'a, L: Language> {
     pub substs: Vec<Subst>,
     /// The farfetchedness of the new terms that this each substitution creates.
     /// Must have the same length as substs (or be empty if not computed yet).
-    pub ffns: Vec<egraph::Ffn>, 
+//    pub ffns: Vec<egraph::Ffn>, 
     /// Optionally, an ast for the matches used in proof production.
     pub ast: Option<Cow<'a, PatternAst<L>>>,
 }
@@ -265,20 +265,16 @@ impl<'a, L: Language> SearchMatches<'a, L> {
     /// and record the far-fetchedness of each term in ffns.
     pub fn compute_and_filter_ffns<N: Analysis<L>>(
         &mut self, 
-        egraph: &EGraph<L, N>, 
-        searcher: &std::sync::Arc<dyn Searcher<L, N> + Sync + Send>,
-        max_ffn: Ffn
+        _egraph: &EGraph<L, N>, 
+        _searcher: &std::sync::Arc<dyn Searcher<L, N> + Sync + Send>
     ) -> () {
+        // TODO?
         // self.ffns.resize(self.substs.len(), 0); // <-- to disable ffn restrictions
-        let all_substs = self.substs.clone();
-        self.substs.clear();
-        for subst in all_substs {
-            let ffn = ffn_increase(searcher.ffn_of_subst(&egraph, &subst));
-            if ffn <= max_ffn {
-                self.substs.push(subst);
-                self.ffns.push(ffn);
-            }
-        }
+        // let all_substs = self.substs.clone();
+        // self.substs.clear();
+        // for subst in all_substs {
+        //         self.substs.push(subst);
+        // }
     }
 }
 
@@ -287,9 +283,9 @@ impl<L: Language, A: Analysis<L>> Searcher<L, A> for Pattern<L> {
         Some(&self.ast)
     }
 
-    fn ffn_of_subst(&self, egraph: &EGraph<L, A>, subst: &Subst) -> Ffn {
-        egraph.max_ffn_of_instantiated_pattern(&self.ast, &subst)
-    }
+    // fn ffn_of_subst(&self, egraph: &EGraph<L, A>, subst: &Subst) -> Ffn {
+    //     egraph.max_ffn_of_instantiated_pattern(&self.ast, &subst)
+    // }
 
     fn search(&self, egraph: &EGraph<L, A>) -> Vec<SearchMatches<L>> {
         match self.ast.as_ref().last().unwrap() {
@@ -317,11 +313,9 @@ impl<L: Language, A: Analysis<L>> Searcher<L, A> for Pattern<L> {
             None
         } else {
             let ast = Some(Cow::Borrowed(&self.ast));
-            let ffns = vec![];
             Some(SearchMatches {
                 eclass,
                 substs,
-                ffns,
                 ast,
             })
         }
@@ -352,16 +346,16 @@ where
         let mut id_buf = vec![0.into(); ast.len()];
         for mat in matches {
             let sast = mat.ast.as_ref().map(|cow| cow.as_ref());
-            for (subst, ffn) in mat.substs.iter().zip(mat.ffns.iter()) {
+            for subst in mat.substs.iter() {
                 let did_something;
                 let id;
                 if egraph.are_explanations_enabled() {
                     let (id_temp, did_something_temp) =
-                        egraph.union_instantiations(sast.unwrap(), &self.ast, subst, rule_name, *ffn);
+                        egraph.union_instantiations(sast.unwrap(), &self.ast, subst, rule_name);
                     did_something = did_something_temp;
                     id = id_temp;
                 } else {
-                    id = apply_pat(&mut id_buf, ast, egraph, subst, *ffn);
+                    id = apply_pat(&mut id_buf, ast, egraph, subst);
                     did_something = egraph.union(id, mat.eclass);
                 }
 
@@ -380,15 +374,14 @@ where
         subst: &Subst,
         searcher_ast: Option<&PatternAst<L>>,
         rule_name: Symbol,
-        ffn: egraph::Ffn,
     ) -> Vec<Id> {
         let ast = self.ast.as_ref();
         let mut id_buf = vec![0.into(); ast.len()];
-        let id = apply_pat(&mut id_buf, ast, egraph, subst, ffn);
+        let id = apply_pat(&mut id_buf, ast, egraph, subst);
 
         if let Some(ast) = searcher_ast {
             let (from, did_something) =
-                egraph.union_instantiations(ast, &self.ast, subst, rule_name, ffn);
+                egraph.union_instantiations(ast, &self.ast, subst, rule_name);
             if did_something {
                 vec![from]
             } else {
@@ -410,8 +403,7 @@ pub(crate) fn apply_pat<L: Language, A: Analysis<L>>(
     ids: &mut [Id],
     pat: &[ENodeOrVar<L>],
     egraph: &mut EGraph<L, A>,
-    subst: &Subst,
-    ffn: egraph::Ffn
+    subst: &Subst
 ) -> Id {
     debug_assert_eq!(pat.len(), ids.len());
     trace!("apply_rec {:2?} {:?}", pat, subst);
@@ -422,7 +414,7 @@ pub(crate) fn apply_pat<L: Language, A: Analysis<L>>(
             ENodeOrVar::ENode(e) => {
                 let n = e.clone().map_children(|child| ids[usize::from(child)]);
                 trace!("adding: {:?}", n);
-                egraph.add_with_farfetchedness(n, ffn)
+                egraph.add_with_farfetchedness(n)
             }
         };
         ids[i] = id;
@@ -448,7 +440,6 @@ mod tests {
             &"(+ z w)".parse().unwrap(),
             &Default::default(),
             "union_plus".to_string(),
-            egraph::ffn_zero(),
         );
         egraph.rebuild();
 

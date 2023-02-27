@@ -191,7 +191,7 @@ pub fn is_eq(name: &str) -> Option<bool> {
 }
 
 #[allow(unused_variables)]
-pub fn run_simplifier(f_simplify : fn(&str, Vec<&str>, Ffn) -> (), f_prove : fn(&str, &str, Vec<&str>) -> ()) {
+pub fn run_simplifier(f_simplify : fn(&str, Vec<&str>) -> (), f_prove : fn(&str, &str, Vec<&str>) -> ()) {
   let es = vec![
     "(&ZToWord !0)",
     "(&Z.lt !0(&Z.pow !2 !4))",
@@ -208,5 +208,5 @@ pub fn run_simplifier(f_simplify : fn(&str, Vec<&str>, Ffn) -> (), f_prove : fn(
     "(&Z.lt(&Z.pow !2 !3)(&Z.pow !2 !4))",
   ];
   let st : &str = "(&Z.le !0(&Z.mul(&Z.div(&unsigned(&wsub &x2 &x1))(&Z.pow !2 !4))(&Z.pow !2 !3)))";
-  f_simplify(st, es, 6);
+  f_simplify(st, es);
 }

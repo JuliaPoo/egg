@@ -91,7 +91,7 @@ pub use {
     coqlib::*,
     dot::Dot,
     eclass::EClass,
-    egraph::{EGraph, Ffn, ffn_zero, ffn_max, ffn_increase},
+    egraph::{EGraph},
     explain::{Explanation, FlatExplanation, FlatTerm, TreeExplanation, TreeTerm},
     extract::*,
     language::*,

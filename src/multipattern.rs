@@ -130,13 +130,13 @@ impl<L: Language, A: Analysis<L>> Searcher<L, A> for MultiPattern<L> {
         Some(ast_aux)
     }
 
-    fn ffn_of_subst(&self, egraph: &EGraph<L, A>, subst: &Subst) -> Ffn {
-        let mut current_max = ffn_zero();
-        for (_patname, pat) in self.asts.iter() {
-            current_max = ffn_max(current_max, egraph.max_ffn_of_instantiated_pattern(&pat, &subst));
-        }
-        current_max
-    }
+    // fn ffn_of_subst(&self, egraph: &EGraph<L, A>, subst: &Subst) -> Ffn {
+    //     let mut current_max = ffn_zero();
+    //     for (_patname, pat) in self.asts.iter() {
+    //         current_max = ffn_max(current_max, egraph.max_ffn_of_instantiated_pattern(&pat, &subst));
+    //     }
+    //     current_max
+    // }
 
     fn search_eclass(&self, egraph: &EGraph<L, A>, eclass: Id) -> Option<SearchMatches<L>> {
         let substs = self.program.run(egraph, eclass);
@@ -145,11 +145,9 @@ impl<L: Language, A: Analysis<L>> Searcher<L, A> for MultiPattern<L> {
         } else {
             let (_var,ast_aux) = &self.asts.last().unwrap();
             let ast = Some(Cow::Borrowed(ast_aux));
-            let ffns = vec![];
             Some(SearchMatches {
                 eclass,
                 substs,
-                ffns,
                 ast,
             })
         }
@@ -179,7 +177,6 @@ impl<L: Language, A: Analysis<L>> Applier<L, A> for MultiPattern<L> {
         _subst: &Subst,
         _searcher_ast: Option<&PatternAst<L>>,
         _rule_name: Symbol,
-        _ffn: egraph::Ffn,
     ) -> Vec<Id> {
         panic!("Multipatterns do not support apply_one")
     }
@@ -194,12 +191,12 @@ impl<L: Language, A: Analysis<L>> Applier<L, A> for MultiPattern<L> {
         // the ids returned are kinda garbage
         let mut added = vec![];
         for mat in matches {
-            for (subst, ffn) in mat.substs.iter().zip(mat.ffns.iter()) {
+            for subst in mat.substs.iter() {
                 let mut subst = subst.clone();
                 let mut id_buf = vec![];
                 for (i, (v, p)) in self.asts.iter().enumerate() {
                     id_buf.resize(p.as_ref().len(), 0.into());
-                    let id1 = crate::pattern::apply_pat(&mut id_buf, p.as_ref(), egraph, &subst, *ffn);
+                    let id1 = crate::pattern::apply_pat(&mut id_buf, p.as_ref(), egraph, &subst);
                     if let Some(id2) = subst.insert(*v, id1) {
                         egraph.union(id1, id2);
                     }

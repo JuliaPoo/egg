@@ -26,7 +26,7 @@ fn simplify<'a>(rules: Vec<Rewrite<SimpleLanguage, ()>>, s: &str, extra_s : Vec<
         .with_explanations_enabled()
         //.with_node_limit(50)
         //.with_iter_limit(2)
-        .with_ffn_limit(2)
+        // .with_ffn_limit(2)
         .with_expr(&expr)
         .with_exprs(extra_exprs.iter().map(|x| &*x).collect())
         //.with_hook(|r| Ok(print_eclasses(&r.egraph)))

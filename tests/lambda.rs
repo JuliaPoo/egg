@@ -102,8 +102,8 @@ impl Analysis<Lambda> for LambdaAnalysis {
                     &c.0.to_string().parse().unwrap(),
                     &c.1,
                     &Default::default(),
-                    "analysis".to_string(),
-                    ffn_zero()
+                    "analysis".to_string()
+                    // ffn_zero()
                 );
             } else {
                 let const_id = egraph.add(c.0);
@@ -177,8 +177,8 @@ impl Applier<Lambda, LambdaAnalysis> for CaptureAvoid {
         eclass: Id,
         subst: &Subst,
         searcher_ast: Option<&PatternAst<Lambda>>,
-        rule_name: Symbol,
-        ffn: Ffn
+        rule_name: Symbol
+        // ffn: Ffn
     ) -> Vec<Id> {
         let e = subst[self.e];
         let v2 = subst[self.v2];
@@ -188,10 +188,10 @@ impl Applier<Lambda, LambdaAnalysis> for CaptureAvoid {
             let sym = Lambda::Symbol(format!("_{}", eclass).into());
             subst.insert(self.fresh, egraph.add(sym));
             self.if_free
-                .apply_one(egraph, eclass, &subst, searcher_ast, rule_name, ffn)
+                .apply_one(egraph, eclass, &subst, searcher_ast, rule_name)
         } else {
             self.if_not_free
-                .apply_one(egraph, eclass, subst, searcher_ast, rule_name, ffn)
+                .apply_one(egraph, eclass, subst, searcher_ast, rule_name)
         }
     }
 }

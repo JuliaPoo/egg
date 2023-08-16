@@ -189,7 +189,7 @@ impl CostFunction<SymbolLang> for MotivateTrue {
 
 /// parse an expression, simplify it using egg, and pretty print it back out
 #[allow(dead_code, unused_must_use)]
-fn simplify(s: &str, extra_s : Vec<&str>, ffn_limit: Ffn) -> () {
+fn simplify(s: &str, extra_s : Vec<&str>) -> () {
     // parse the expression, the type annotation tells it which Language to use
     let expr: RecExpr<CoqSimpleLanguage> = s.parse().unwrap();
     // let expr: RecExpr<SymbolLang> = s.parse().unwrap();
@@ -203,7 +203,7 @@ fn simplify(s: &str, extra_s : Vec<&str>, ffn_limit: Ffn) -> () {
         .with_node_limit(10000)
         .with_time_limit(instant::Duration::from_secs(10))
         .with_expr(&expr)
-        .with_ffn_limit(ffn_limit)
+        // .with_ffn_limit(ffn_limit)
         .with_exprs(extra_exprs.iter().map(|x| &*x).collect())
         .run(&make_rules());
     // the Runner knows which e-class the expression given with `with_expr` is in

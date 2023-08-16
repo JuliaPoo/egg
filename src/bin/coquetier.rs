@@ -95,8 +95,8 @@ impl Server {
         c.insert("&True".to_string(),1.0);
         c.insert("&Prop".to_string(),1.0);
         Self { 
-            verbose : true,
-            //verbose : false,
+            // verbose : true,
+            verbose : false,
 
             infile: infile,
             outfile: outfile,

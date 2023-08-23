@@ -1,6 +1,8 @@
 use std::cmp::Ordering;
 use std::fmt::Debug;
 
+use either::*; 
+
 use crate::util::HashMap;
 use crate::{Analysis, EClass, EGraph, Id, Language, RecExpr};
 
@@ -40,7 +42,7 @@ assert_eq!(best, "10".parse().unwrap());
 #[derive(Debug)]
 pub struct Extractor<'a, CF: CostFunction<L>, L: Language, N: Analysis<L>> {
     cost_function: CF,
-    costs: HashMap<Id, (CF::Cost, L)>,
+    costs: HashMap<Id, (CF::Cost, Either<L, RecExpr<L>>)>,
     egraph: &'a EGraph<L, N>,
 }
 
@@ -127,6 +129,7 @@ pub trait CostFunction<L: Language> {
     /// down the [`RecExpr`].
     ///
     fn cost_rec(&mut self, expr: &RecExpr<L>) -> Self::Cost {
+        // TODO fix
         let mut costs: HashMap<Id, Self::Cost> = HashMap::default();
         for (i, node) in expr.as_ref().iter().enumerate() {
             let cost = self.cost(node, |i| costs[&i].clone());
@@ -201,13 +204,21 @@ where
     /// The extraction does all the work on creation, so this function
     /// performs the greedy search for cheapest representative of each
     /// eclass.
-    pub fn new(egraph: &'a EGraph<L, N>, cost_function: CF) -> Self {
+    pub fn new(egraph: &'a EGraph<L, N>, cost_function: CF, search_for : Vec<RecExpr<L>>) -> Self {
         let costs = HashMap::default();
         let mut extractor = Extractor {
             costs,
             egraph,
             cost_function,
         };
+        for e in search_for {
+            match egraph.lookup_expr(&e) {
+                Some(i) => {
+                        costs.insert(i, (0 ,Right(e)));
+                }
+                None => {}
+           }
+        }
         extractor.find_costs();
 
         extractor
@@ -216,20 +227,22 @@ where
     /// Find the cheapest (lowest cost) represented `RecExpr` in the
     /// given eclass.
     pub fn find_best(&self, eclass: Id) -> (CF::Cost, RecExpr<L>) {
+        // TODO
         let (cost, root) = self.costs[&self.egraph.find(eclass)].clone();
         let expr = root.build_recexpr(|id| self.find_best_node(id).clone());
         (cost, expr)
     }
 
     /// Find the cheapest e-node in the given e-class.
-    pub fn find_best_node(&self, eclass: Id) -> &L {
+    pub fn find_best_representant(&self, eclass: Id) -> &Either<L, RecExpr<L>> {
         &self.costs[&self.egraph.find(eclass)].1
     }
 
     /// Find the cost of the term that would be extracted from this e-class.
     pub fn find_best_cost(&self, eclass: Id) -> CF::Cost {
-        let (cost, _) = &self.costs[&self.egraph.find(eclass)];
-        cost.clone()
+        panic!("TODO unimplemented");
+        // let (cost, _) = &self.costs[&self.egraph.find(eclass)];
+        // cost.clone()
     }
 
     fn node_total_cost(&mut self, node: &L) -> Option<CF::Cost> {
@@ -276,7 +289,7 @@ where
         }
     }
 
-    fn make_pass(&mut self, eclass: &EClass<L, N::Data>) -> Option<(CF::Cost, L)> {
+    fn make_pass(&mut self, eclass: &EClass<L, N::Data>) -> Option<(CF::Cost, Either<L, RecExpr<L>>)> {
         let (cost, node) = eclass
             .iter()
             .map(|n| (self.node_total_cost(n), n))

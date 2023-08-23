@@ -4,11 +4,13 @@ use std::fmt::Debug;
 use crate::*;
 
 #[derive(Debug)]
-pub struct ExtractorContaining<'a, CF, L: Language, N: Analysis<L>> {
+pub struct ExtractorContaining<'a, CF: CostFunction<L>, L: Language, N: Analysis<L>> {
     // targets:  Vector<L>, 
     cost_function: CF, // Not super useful
     target: L, 
-    good_terms: HashMap<Id, Option<L>>,
+    // good_terms: HashMap<Id, Option<L>>,
+    // Cost structure is a pair
+    costs: HashMap<Id, (CF::Cost, L)>,
     egraph: &'a EGraph<L, N>,
 }
 

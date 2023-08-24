@@ -153,7 +153,6 @@ impl Server {
         match &l[1] {
             res => { self.require_terms.push(res.string().unwrap().parse().unwrap()); }
         }
-
     }
 
 
@@ -327,7 +326,7 @@ impl Server {
         }
         let dump_time = t.elapsed().as_secs_f64();
         if self.verbose { println!("Dumping the egraph took {dump_time:.3}s"); }
-        let terms = self.require_terms;
+        let terms = self.require_terms.clone();
         let length = terms.len();
 
         fn kronecker(l: usize, i: usize) -> Vec<i64> {

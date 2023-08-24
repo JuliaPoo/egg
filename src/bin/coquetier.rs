@@ -87,6 +87,7 @@ struct Server {
     rules: Vec<Rule>,
     runner: Runner<SymbolLang, ()>,
     cost: HashMap<String, f64,  fxhash::FxBuildHasher>,
+    require_terms : Vec<RecExpr<SymbolLang>> 
 }
 
 impl Server {
@@ -106,7 +107,8 @@ impl Server {
                 .with_explanations_enabled()
                 .with_node_limit(10000)
                 .with_time_limit(instant::Duration::from_secs(10)),
-            cost: c 
+            cost: c,
+            require_terms: Vec::new()
         }
     }
 
@@ -129,6 +131,7 @@ impl Server {
                             "minimize" => { self.process_minimize(l) }
                             "search" => { self.process_search(l) }
                             "avoid" => { self.process_avoid(l) }
+                            "require" => { self.process_require(l) }
                             _ => { panic!("unknown command {}", command); }
                         }
                     }
@@ -142,6 +145,13 @@ impl Server {
         match &l[1] {
             Sexp::String(res) => { self.cost.insert(res.clone(), 10000.); }
             _ => { panic!("assert expects list") }
+        }
+
+    }
+
+    fn process_require(&mut self, l: Vec<Sexp>) -> () {
+        match &l[1] {
+            res => { self.cost.insert(res.clone(), 10000.); }
         }
 
     }
@@ -317,9 +327,17 @@ impl Server {
         }
         let dump_time = t.elapsed().as_secs_f64();
         if self.verbose { println!("Dumping the egraph took {dump_time:.3}s"); }
-       
+        let terms = self.require_terms;
+        let length = terms.len();
 
-        let to_search = [].to_vec();
+        fn kronecker(l: usize, i: usize) -> Vec<i64> {
+            let mut res = vec![1; l];
+            res[i] = 0;
+            return res;
+        }
+
+        let to_search : Vec<((Vec<i64>, f64), RecExpr<SymbolLang>)> = terms.iter().enumerate().map(|(idx,e)| 
+                                                    ((kronecker(length ,idx),0.),e.clone())).collect();
         let extractor = Extractor::new(&self.runner.egraph, MotivateTrue{motivated: &self.cost, number_appear: to_search.len()}, to_search);
         let (best_cost, best) = extractor.find_best(root);
         // println!("Simplified\n{}\nto\n{}\nwith cost {}", expr, best, best_cost);

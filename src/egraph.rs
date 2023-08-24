@@ -800,14 +800,14 @@ impl<L: Language + Display, N: Analysis<L>> EGraph<L, N> {
     ///
     /// Useful for testing.
     pub fn check_goals(&self, id: Id, goals: &[Pattern<L>]) {
-        let (cost, best) = Extractor::new(self, AstSize).find_best(id);
+        let (cost, best) = Extractor::new(self, AstSize, [].to_vec()).find_best(id);
         println!("End ({}): {}", cost, best.pretty(80));
 
         for (i, goal) in goals.iter().enumerate() {
             println!("Trying to prove goal {}: {}", i, goal.pretty(40));
             let matches = goal.search_eclass(self, id);
             if matches.is_none() {
-                let best = Extractor::new(self, AstSize).find_best(id).1;
+                let best = Extractor::new(self, AstSize, [].to_vec()).find_best(id).1;
                 panic!(
                     "Could not prove goal {}:\n\
                      {}\n\

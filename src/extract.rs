@@ -204,17 +204,17 @@ where
     /// The extraction does all the work on creation, so this function
     /// performs the greedy search for cheapest representative of each
     /// eclass.
-    pub fn new(egraph: &'a EGraph<L, N>, cost_function: CF, search_for : Vec<RecExpr<L>>) -> Self {
-        let costs = HashMap::default();
+    pub fn new(egraph: &'a EGraph<L, N>, cost_function: CF, search_for : Vec<(CF::Cost, RecExpr<L>)>) -> Self {
+        let mut costs = HashMap::default();
         let mut extractor = Extractor {
             costs,
             egraph,
             cost_function,
         };
-        for e in search_for {
+        for (c,e ) in search_for {
             match egraph.lookup_expr(&e) {
                 Some(i) => {
-                        costs.insert(i, (0 ,Right(e)));
+                        costs.insert(i, (c ,Right(e)));
                 }
                 None => {}
            }
@@ -229,8 +229,12 @@ where
     pub fn find_best(&self, eclass: Id) -> (CF::Cost, RecExpr<L>) {
         // TODO
         let (cost, root) = self.costs[&self.egraph.find(eclass)].clone();
+        // match root {
+        //     Left(l) => { panic!("Yo"); }
+        //     Right(r) => { return (cost,r); }
+        // }
         let expr = root.build_recexpr(|id| self.find_best_node(id).clone());
-        (cost, expr)
+        // (cost, expr)
     }
 
     /// Find the cheapest e-node in the given e-class.

@@ -151,7 +151,7 @@ impl Server {
 
     fn process_require(&mut self, l: Vec<Sexp>) -> () {
         match &l[1] {
-            res => { self.cost.insert(res.clone(), 10000.); }
+            res => { self.require_terms.push(res.string().unwrap().parse().unwrap()); }
         }
 
     }

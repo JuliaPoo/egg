@@ -1,5 +1,6 @@
 use symbolic_expressions::*;
 use std::io::{Write};
+use std::cmp::min;
 use crate::*;
 
 /// Remove typer annotations and add "hole" in case of explanations
@@ -158,18 +159,25 @@ pub fn find_distinct_ctor_equals<L: Language + std::fmt::Display, N: Analysis<L>
 /// Cost of terms to control simplification
 #[warn(missing_docs)]
 pub struct MotivateTrue<'a>{
+    pub number_appear: usize,
 #[warn(missing_docs)]
     pub motivated: &'a HashMap<String, f64>
 }
 
 impl CostFunction<SymbolLang> for MotivateTrue<'_> {
-    type Cost = f64;
+    type Cost = (Vec<i64>, f64);
     fn cost<C>(&mut self, enode: &SymbolLang, mut costs: C) -> Self::Cost
     where
         C: FnMut(Id) -> Self::Cost
     {
         let op_cost = self.motivated.get(&enode.op.to_string()).unwrap_or(&4.0);
-        enode.fold(*op_cost, |sum, id| sum + costs(id))
+        let cost_post_mandate = enode.fold(*op_cost, |sum, id| 
+                    sum + costs(id).1);
+        let repeat1 = vec![1; self.number_appear];
+        let cost_vector = enode.fold(repeat1, |sum, id| 
+                    min(sum, costs(id).0));
+        return (cost_vector, cost_post_mandate);
+
     }
 }
 

@@ -270,8 +270,9 @@ impl Server {
        
 
         // We now want to give back the results
+        let to_search = [].to_vec();
         let result = expr.search(&self.runner.egraph);
-        let extractor = Extractor::new(&self.runner.egraph, MotivateTrue{motivated: &self.cost});
+        let extractor = Extractor::new(&self.runner.egraph, MotivateTrue{motivated: &self.cost, number_appear: to_search.len()}, to_search);
         let path = &self.outfile; 
         let f = File::create(path).expect("unable to create file");
         let mut writer = BufWriter::new(f);
@@ -318,12 +319,13 @@ impl Server {
         if self.verbose { println!("Dumping the egraph took {dump_time:.3}s"); }
        
 
-        let extractor = Extractor::new(&self.runner.egraph, MotivateTrue{motivated: &self.cost});
+        let to_search = [].to_vec();
+        let extractor = Extractor::new(&self.runner.egraph, MotivateTrue{motivated: &self.cost, number_appear: to_search.len()}, to_search);
         let (best_cost, best) = extractor.find_best(root);
         // println!("Simplified\n{}\nto\n{}\nwith cost {}", expr, best, best_cost);
         let mut ctor_equals = None;
 
-        if best_cost != 6.0 {
+        if best_cost.1 != 6.0 {
             // Only if we failed to simplify to True (only expression of cost equal to one)
             // then check try to find an inconsistency. This allow us to use
             // Coquetier to generate the proof of equality between the two distinct

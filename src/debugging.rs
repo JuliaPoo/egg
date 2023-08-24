@@ -8,7 +8,7 @@ pub fn print_eclasses_to_writer<W: Write, L: Language + std::fmt::Display, N: An
     eg: &EGraph<L, N>,
     w: &mut W
 ) -> () {
-    let extractor = Extractor::new(eg, AstSize);
+    let extractor = Extractor::new(eg, AstSize, [].to_vec());
     let mut classes : Vec<&EClass<L, _>> = eg.classes().collect();
     classes.sort_by(|a, b| a.id.cmp(&b.id));
     for class in classes {

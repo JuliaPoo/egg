@@ -163,6 +163,13 @@ pub struct MotivateTrue<'a>{
 #[warn(missing_docs)]
     pub motivated: &'a HashMap<String, f64>
 }
+fn pmin(v1: Vec<i64>, v2:Vec<i64>) -> Vec<i64> {
+    let mut res = Vec::new();
+    for (idx,e) in v1.iter().enumerate() {
+        res.push(min(e,&v2[idx]).clone());
+    }
+    return res;
+}
 
 impl CostFunction<SymbolLang> for MotivateTrue<'_> {
     type Cost = (Vec<i64>, f64);
@@ -175,7 +182,7 @@ impl CostFunction<SymbolLang> for MotivateTrue<'_> {
                     sum + costs(id).1);
         let repeat1 = vec![1; self.number_appear];
         let cost_vector = enode.fold(repeat1, |sum, id| 
-                    min(sum, costs(id).0));
+                    pmin(sum, costs(id).0));
         return (cost_vector, cost_post_mandate);
 
     }

@@ -771,18 +771,22 @@ pub fn merge_min<T: Ord>(to: &mut T, from: T) -> DidMerge {
 /// A simple language used for testing.
 #[derive(Debug, Hash, PartialEq, Eq, Clone, PartialOrd, Ord)]
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
-pub struct SymbolLang {
-    /// The operator for an enode
-    pub op: Symbol,
-    /// The enode's children `Id`s
-    pub children: Vec<Id>,
-}
+pub enum SymbolLang{
+        Num(i32),
+        Symb(Symbol, Vec<Id>),
+    }
+// pub struct SymbolLang {
+//     /// The operator for an enode
+//     pub op: Symbol,
+//     /// The enode's children `Id`s
+//     pub children: Vec<Id>,
+// }
 
 impl SymbolLang {
     /// Create an enode with the given string and children
     pub fn new(op: impl Into<Symbol>, children: Vec<Id>) -> Self {
         let op = op.into();
-        Self { op, children }
+        Self::Symb(op, children)
     }
 
     /// Create childless enode with the given string
@@ -793,21 +797,35 @@ impl SymbolLang {
 
 impl Language for SymbolLang {
     fn matches(&self, other: &Self) -> bool {
-        self.op == other.op && self.len() == other.len()
+        match (self,other) {
+            (Self::Symb(op1,v1),Self::Symb(op2,v2))=> {
+                return op1 == op2 && v1.len() == v2.len();
+            }
+            (Self::Num(a), Self::Num(b)) => { return a == b; } 
+        }
     }
 
     fn children(&self) -> &[Id] {
-        &self.children
+        match &self {
+            Self::Num(_) => { return &[]; }
+            Self::Symb(op, children) => { return children; }
+        }
     }
 
     fn children_mut(&mut self) -> &mut [Id] {
-        &mut self.children
+        match self {
+            Self::Symb(op, children) => { return &mut children; }
+            Self::Num(_) => { return &mut []; } // Suspicious?
+        }
     }
 }
 
 impl Display for SymbolLang {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        Display::fmt(&self.op, f)
+        match self {
+            Self::Symb(op,children) => { Display::fmt(op, f) }
+            Self::Num(a) => { Display::fmt(a,f) }
+        }
     }
 }
 
@@ -815,9 +833,6 @@ impl FromOp for SymbolLang {
     type Error = Infallible;
 
     fn from_op(op: &str, children: Vec<Id>) -> Result<Self, Self::Error> {
-        Ok(Self {
-            op: op.into(),
-            children,
-        })
+        Ok(Self::Symb(op.into(), children))
     }
 }

@@ -96,17 +96,17 @@ impl Server {
         c.insert("&True".to_string(),1.0);
         c.insert("&Prop".to_string(),1.0);
         Self { 
-            // verbose : true,
-            verbose : false,
+            verbose : true,
+            // verbose : false,
 
             infile: infile,
             outfile: outfile,
             rules: Default::default(), 
             runner: Runner::default()
-                .with_iter_limit(7)
+                .with_iter_limit(6)
                 .with_explanations_enabled()
                 .with_node_limit(10000)
-                .with_time_limit(instant::Duration::from_secs(10)),
+                .with_time_limit(instant::Duration::from_secs(1)),
             cost: c,
             require_terms: Vec::new()
         }

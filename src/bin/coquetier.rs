@@ -328,12 +328,17 @@ impl Server {
         if self.verbose { println!("Dumping the egraph took {dump_time:.3}s"); }
         let terms = self.require_terms.clone();
         let length = terms.len();
+        
+        for e in &terms {
+            self.runner.add_expr(&e);
+        }
 
         fn kronecker(l: usize, i: usize) -> Vec<i64> {
             let mut res = vec![1; l];
             res[i] = 0;
             return res;
         }
+
 
         let to_search : Vec<((Vec<i64>, f64), RecExpr<SymbolLang>)> = terms.iter().enumerate().map(|(idx,e)| 
                                                     ((kronecker(length ,idx),0.),e.clone())).collect();

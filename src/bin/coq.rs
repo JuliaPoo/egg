@@ -246,7 +246,9 @@ fn simplify(s: &str, extra_s : Vec<&str>) -> () {
             for exp in explanation {
                 let (holified, fw, name_th, applied_th, new) = holify(exp);
                 let rw_lemma = if fw { "@rew_zoom_fw" } else { "@rew_zoom_bw" };
+                let thname =&name_th.to_string() in 
                 let th = if is_eq(&name_th.to_string()).unwrap() { 
+                    println!("{thname} is an equality");
                     format!("{applied_th}")
                 } else { 
                     format!("(prove_True_eq _ {applied_th})") 
@@ -255,7 +257,7 @@ fn simplify(s: &str, extra_s : Vec<&str>) -> () {
             }
             writeln!(writer, "idtac).");
             writer.flush().expect("error flushing");
-            println!("Wrote proof to {path}");
+            println!("Wrote contradictory proof to {path}");
         }
         None => {
             // use an Extractor to pick the best element of the root eclass

@@ -134,6 +134,7 @@ pub fn find_distinct_ctor_equals<L: Language + std::fmt::Display, N: Analysis<L>
                                             let (_best_cost, best) = extractor.find_best(*child);
                                             s.push_str (&format!(" {}", best))
                                         }
+                                        // TODO fix now that we have ffn internalized
                                         return Some((format!("(annot ({} {}) {})", ctor1, children1, type1), format!("(annot ({} {}) {})", opname, s, ntype)))}
                                 }
                             None => { 
@@ -159,8 +160,9 @@ pub fn find_distinct_ctor_equals<L: Language + std::fmt::Display, N: Analysis<L>
 /// Cost of terms to control simplification
 #[warn(missing_docs)]
 pub struct MotivateTrue<'a>{
+    /// Number of terms that we are looking for
     pub number_appear: usize,
-#[warn(missing_docs)]
+    /// Symbols we want to make expensive
     pub motivated: &'a HashMap<String, f64>
 }
 fn pmin(v1: Vec<i64>, v2:Vec<i64>) -> Vec<i64> {
@@ -177,7 +179,12 @@ impl CostFunction<SymbolLang> for MotivateTrue<'_> {
     where
         C: FnMut(Id) -> Self::Cost
     {
-        let op_cost = self.motivated.get(&enode.op.to_string()).unwrap_or(&4.0);
+        
+        let op_cost = 
+            match &enode {
+            SymbolLang::Num(_) => { &0.0 }
+            SymbolLang::Symb(op,_children) => { self.motivated.get(&op.to_string()).unwrap_or(&4.0) }
+            };
         let cost_post_mandate = enode.fold(*op_cost, |sum, id| 
                     sum + costs(id).1);
         let repeat1 = vec![1; self.number_appear];

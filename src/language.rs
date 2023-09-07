@@ -554,6 +554,7 @@ impl<L: FromOp> FromStr for RecExpr<L> {
             match sexp {
                 Sexp::Empty => Err(EmptySexp),
                 Sexp::String(s) => {
+                    // Either we fo a from_op, or we do a num?
                     let node = L::from_op(s, vec![]).map_err(BadOp)?;
                     Ok(expr.add(node))
                 }
@@ -772,7 +773,9 @@ pub fn merge_min<T: Ord>(to: &mut T, from: T) -> DidMerge {
 #[derive(Debug, Hash, PartialEq, Eq, Clone, PartialOrd, Ord)]
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub enum SymbolLang{
+        /// A number mainly used for ffn
         Num(i32),
+        /// Interesting symbolic enode
         Symb(Symbol, Vec<Id>),
     }
 // pub struct SymbolLang {
@@ -802,19 +805,20 @@ impl Language for SymbolLang {
                 return op1 == op2 && v1.len() == v2.len();
             }
             (Self::Num(a), Self::Num(b)) => { return a == b; } 
+            (_,_) => { return false;}
         }
     }
 
     fn children(&self) -> &[Id] {
         match &self {
             Self::Num(_) => { return &[]; }
-            Self::Symb(op, children) => { return children; }
+            Self::Symb(_op, children) => { return children; }
         }
     }
 
     fn children_mut(&mut self) -> &mut [Id] {
         match self {
-            Self::Symb(op, children) => { return &mut children; }
+            Self::Symb(_op, children) => { return children; }
             Self::Num(_) => { return &mut []; } // Suspicious?
         }
     }
@@ -823,7 +827,7 @@ impl Language for SymbolLang {
 impl Display for SymbolLang {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Symb(op,children) => { Display::fmt(op, f) }
+            Self::Symb(op,_children) => { Display::fmt(op, f) }
             Self::Num(a) => { Display::fmt(a,f) }
         }
     }
@@ -833,6 +837,9 @@ impl FromOp for SymbolLang {
     type Error = Infallible;
 
     fn from_op(op: &str, children: Vec<Id>) -> Result<Self, Self::Error> {
-        Ok(Self::Symb(op.into(), children))
+        match op.parse::<i32>() {
+            Ok(n) => { Ok(Self::Num(n)) }
+            Err(_) => { Ok(Self::Symb(op.into(), children)) }
+        }
     }
 }

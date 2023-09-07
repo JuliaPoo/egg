@@ -39,7 +39,9 @@ impl Rule {
     pub fn is_eq(&self) -> bool {
         let true_typed : Sexp = Sexp::List(vec![ Sexp::String("annot".to_string()), 
                                         Sexp::String("&True".to_string()),
-                                        Sexp::String("&Prop".to_string()) ]);
+                                        Sexp::String("&Prop".to_string()),
+                                        Sexp::String("0".to_string()),
+                                         ]);
         return self.conclusion_lhs != true_typed || (self.rulename == "reify_fundamental".to_string());
     }
 
@@ -96,8 +98,8 @@ impl Server {
         c.insert("&True".to_string(),1.0);
         c.insert("&Prop".to_string(),1.0);
         Self { 
-            verbose : true,
-            // verbose : false,
+            // verbose : true,
+            verbose : false,
 
             infile: infile,
             outfile: outfile,
@@ -419,7 +421,7 @@ impl Server {
             let sexp = symbolic_expressions::parser::parse_str(&buffer).unwrap();
             self.process_line(sexp);
         }
-        let sexp = symbolic_expressions::parser::parse_str("(assert(!(forall((?t $U) (?x $U) (?y $U)) (=> (= (annot ?x ?t) (annot ?y ?t)) (= ?x ?y))) :named eggTypeEmbedding))").unwrap();
+        let sexp = symbolic_expressions::parser::parse_str("(assert(!(forall((?t $U) (?x $U) (?y $U) (?n $U) (?m $U)) (=> (= (annot ?x ?t ?n) (annot ?y ?t ?m)) (= ?x ?y))) :named eggTypeEmbedding))").unwrap();
         self.process_line(sexp);
     }
 }

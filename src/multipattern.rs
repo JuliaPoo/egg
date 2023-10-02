@@ -140,6 +140,9 @@ impl<L: Language, A: Analysis<L>> Searcher<L, A> for MultiPattern<L> {
 
     fn search_eclass(&self, egraph: &EGraph<L, A>, eclass: Id) -> Option<SearchMatches<L>> {
         let substs = self.program.run(egraph, eclass);
+        // We need to update the default value for all the substitution variables
+        
+
         if substs.is_empty() {
             None
         } else {

@@ -121,7 +121,7 @@ fn holify(e: &Sexp) -> (Sexp, bool, String, Sexp, Sexp) {
 //  Return two terms that staret with distinct constructors but are in the same eclass
 fn find_distinct_ctor_equals<L: Language + std::fmt::Display, N: Analysis<L>>(eg: &EGraph<L, N>) -> Option<(String, String)> {
 
-    let extractor = Extractor::new(eg, AstSize);
+    let extractor = Extractor::new(eg, AstSize, vec![]);
     let classes : Vec<&EClass<L, _>> = eg.classes().collect();
     for class in classes {
         let mut last_ctor_seen : Option<(String, String)> = None;
@@ -211,7 +211,7 @@ fn simplify(s: &str, extra_s : Vec<&str>) -> () {
 
     print_eclasses_to_file(&runner.egraph, "./coq_eclasses_log.txt");
     runner.print_report();
-    let extractor = Extractor::new(&runner.egraph, MotivateTrue);
+    let extractor = Extractor::new(&runner.egraph, MotivateTrue, vec![]);
     let (best_cost, best) = extractor.find_best(root);
     let mut ctor_equals = None;
 
@@ -246,7 +246,7 @@ fn simplify(s: &str, extra_s : Vec<&str>) -> () {
             for exp in explanation {
                 let (holified, fw, name_th, applied_th, new) = holify(exp);
                 let rw_lemma = if fw { "@rew_zoom_fw" } else { "@rew_zoom_bw" };
-                let thname =&name_th.to_string() in 
+                let thname =&name_th.to_string(); 
                 let th = if is_eq(&name_th.to_string()).unwrap() { 
                     println!("{thname} is an equality");
                     format!("{applied_th}")

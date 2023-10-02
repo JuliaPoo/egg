@@ -319,7 +319,7 @@ where
         Self {
             iter_limit: 30,
             node_limit: 10_000,
-            time_limit: Duration::from_secs(5),
+            time_limit: Duration::from_secs(10),
 
             egraph: EGraph::new(analysis),
             roots: vec![],
@@ -441,10 +441,23 @@ where
         L: 'a,
         N: 'a,
     {
-        let rules: Vec<&Rewrite<L, N>> = rules.into_iter().collect();
+        // Split the rules for annotations and the rest
+        let rules_pre: Vec<&Rewrite<L, N>> = rules.into_iter().collect();
+        let rules = rules_pre[1..].to_vec();
+        let rules_annot: Vec<&Rewrite<L, N>> = rules_pre[0..=1].to_vec();
         check_rules(&rules);
         self.egraph.rebuild();
         loop {
+            loop {
+                let iter = self.run_one(&rules_annot);
+                let stop_reason = iter.stop_reason.clone();
+                // we need to check_limits after the iteration is complete to check for iter_limit
+                if let Some(stop_reason) = stop_reason.or_else(|| self.check_limits().err()) {
+                    info!("Stopping inner loop: {:?}", stop_reason);
+                    // self.stop_reason = Some(stop_reason);
+                    break;
+                }
+            }
             let iter = self.run_one(&rules);
             self.iterations.push(iter);
             let stop_reason = self.iterations.last().unwrap().stop_reason.clone();
@@ -588,6 +601,7 @@ where
                     for search_matches in ms.iter_mut() {
                         //print!("Length before: {}, ", search_matches.substs.len());
                         search_matches.compute_and_filter_ffns(egraph, &rules[i].searcher);
+                        // TODO here adjust FFN to drop some?
                         //println!("length after shrinking: {}", search_matches.substs.len());
                     }
                     ms

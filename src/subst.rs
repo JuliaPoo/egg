@@ -51,7 +51,10 @@ impl Debug for Var {
 /// A substitition mapping [`Var`]s to eclass [`Id`]s.
 ///
 pub struct Subst {
-    pub vec: smallvec::SmallVec<[(Var, Id); 3]>,
+    /// Internal map of the substitution
+    pub vec: smallvec::SmallVec<[(Var, Option<Id>); 3]>,
+    /// Default mapping of the substitution
+    pub default_val: Id 
 }
 
 impl Subst {
@@ -59,6 +62,7 @@ impl Subst {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             vec: smallvec::SmallVec::with_capacity(capacity),
+            default_val: Id(0),
         }
     }
 
@@ -66,19 +70,31 @@ impl Subst {
     pub fn insert(&mut self, var: Var, id: Id) -> Option<Id> {
         for pair in &mut self.vec {
             if pair.0 == var {
-                return Some(std::mem::replace(&mut pair.1, id));
+                match &mut pair.1 {
+                    Some(x) => { return Some(std::mem::replace( x, id)) }
+                    None => { return None }
+                }
             }
         }
-        self.vec.push((var, id));
+        self.vec.push((var, Some(id)));
         None
     }
+
+    /// Set default
+    pub fn set_default(&mut self, id: Id) {
+        self.default_val = id
+    }
+
 
     /// Retrieve a `Var`, returning `None` if not present.
     #[inline(never)]
     pub fn get(&self, var: Var) -> Option<&Id> {
         self.vec
             .iter()
-            .find_map(|(v, id)| if *v == var { Some(id) } else { None })
+            .find_map(|(v, id)| if *v == var { match id {
+                Some(id) => { Some(id) }
+                None => { None }
+            } } else { None })
     }
 }
 
@@ -88,7 +104,8 @@ impl std::ops::Index<Var> for Subst {
     fn index(&self, var: Var) -> &Self::Output {
         match self.get(var) {
             Some(id) => id,
-            None => panic!("Var '{}={}' not found in {:?}", var.0, var, self),
+            None => &self.default_val,
+            // panic!("Var '{}={}' not found in {:?}", var.0, var, self),
         }
     }
 }
@@ -99,7 +116,7 @@ impl Debug for Subst {
         write!(f, "{{")?;
         for i in 0..len {
             let (var, id) = &self.vec[i];
-            write!(f, "{}: {}", var, id)?;
+            write!(f, "{}: {:?}", var, id)?;
             if i < len - 1 {
                 write!(f, ", ")?;
             }

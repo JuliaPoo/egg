@@ -143,6 +143,17 @@ impl<L: Language> Language for ENodeOrVar<L> {
     fn matches(&self, _other: &Self) -> bool {
         panic!("Should never call this")
     }
+    fn enode_num(&self) -> Option<i32> {
+        // TODO do we need that?
+        return None;
+        // match self {
+        //     ENodeOrVar::ENode(n) => None
+        //     ENodeOrVar::Var(_) => None,
+        // }
+    }
+    fn num_enode(_num: i32) -> Option<Self> {
+        return None;
+    }
 
     fn children(&self) -> &[Id] {
         match self {
@@ -255,7 +266,7 @@ pub struct SearchMatches<'a, L: Language> {
     pub substs: Vec<Subst>,
     /// The farfetchedness of the new terms that this each substitution creates.
     /// Must have the same length as substs (or be empty if not computed yet).
-//    pub ffns: Vec<egraph::Ffn>, 
+    //    pub ffns: Vec<egraph::Ffn>,
     /// Optionally, an ast for the matches used in proof production.
     pub ast: Option<Cow<'a, PatternAst<L>>>,
 }
@@ -264,17 +275,38 @@ impl<'a, L: Language> SearchMatches<'a, L> {
     /// Filter the substs to contain only those that don't create too far-fetched terms,
     /// and record the far-fetchedness of each term in ffns.
     pub fn compute_and_filter_ffns<N: Analysis<L>>(
-        &mut self, 
-        _egraph: &EGraph<L, N>, 
-        _searcher: &std::sync::Arc<dyn Searcher<L, N> + Sync + Send>
+        &mut self,
+        _egraph: &EGraph<L, N>,
+        _searcher: &std::sync::Arc<dyn Searcher<L, N> + Sync + Send>,
     ) -> () {
-        // TODO?
         // self.ffns.resize(self.substs.len(), 0); // <-- to disable ffn restrictions
-        // let all_substs = self.substs.clone();
-        // self.substs.clear();
-        // for subst in all_substs {
-        //         self.substs.push(subst);
-        // }
+        let all_substs = &mut self.substs.clone();
+        self.substs.clear();
+        for i in all_substs {
+            let x = &i.vec;
+            let mut m = 0;
+            for (_v,sid ) in x {
+                match sid {
+                    Some(id) => {
+                        let eclass = &_egraph[*id].nodes;
+                        for i in eclass.iter() {
+                            match i.enode_num() {
+                                Some(x) => { m = std::cmp::max(m,x); }
+                                None => {}
+                            }
+                        }
+                    }
+                    None => {}
+                }
+            }
+            if m < 6 {
+                let n = L::num_enode(m+1).unwrap();
+                let id_n = _egraph.lookup(n).unwrap();
+                // let mut newi = i.clone();
+                i.set_default(id_n);
+                self.substs.push(i.clone());
+            }
+         }
     }
 }
 
@@ -350,6 +382,7 @@ where
                 let did_something;
                 let id;
                 if egraph.are_explanations_enabled() {
+                    // We never do apply_pat when the explanations are enabled?
                     let (id_temp, did_something_temp) =
                         egraph.union_instantiations(sast.unwrap(), &self.ast, subst, rule_name);
                     did_something = did_something_temp;
@@ -399,18 +432,25 @@ where
     }
 }
 
+// Observation, this is never called
 pub(crate) fn apply_pat<L: Language, A: Analysis<L>>(
     ids: &mut [Id],
     pat: &[ENodeOrVar<L>],
     egraph: &mut EGraph<L, A>,
-    subst: &Subst
+    subst: &Subst,
 ) -> Id {
     debug_assert_eq!(pat.len(), ids.len());
     trace!("apply_rec {:2?} {:?}", pat, subst);
 
+    // let min_value : Id = Id(0);
     for (i, pat_node) in pat.iter().enumerate() {
         let id = match pat_node {
             ENodeOrVar::Var(w) => subst[*w],
+            // {
+            //     Some(x) => { x }
+            //     None => { min_value }
+            // } ,
+            // TODO if we are talking about a variable of the applier we need to Search the different
             ENodeOrVar::ENode(e) => {
                 let n = e.clone().map_children(|child| ids[usize::from(child)]);
                 trace!("adding: {:?}", n);
@@ -467,7 +507,7 @@ mod tests {
 
         use crate::extract::{AstSize, Extractor};
 
-        let ext = Extractor::new(&egraph, AstSize);
+        let ext = Extractor::new(&egraph, AstSize, vec![]);
         let (_, best) = ext.find_best(plus_id);
         eprintln!("Best: {:#?}", best);
     }

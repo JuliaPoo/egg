@@ -63,12 +63,13 @@ impl<L: Language, N: Analysis<L>> Rewrite<L, N> {
         let searcher = Arc::new(searcher);
         let applier = Arc::new(applier);
 
-        let bound_vars = searcher.vars();
-        for v in applier.vars() {
-            if !bound_vars.contains(&v) {
-                return Err(format!("Rewrite {} refers to unbound var {}", name, v));
-            }
-        }
+        // let bound_vars = searcher.vars();
+        // TODO Locally forget about those vars
+        // for v in applier.vars() {
+        //     if !bound_vars.contains(&v) {
+        //         return Err(format!("Rewrite {} refers to unbound var {}", name, v));
+        //     }
+        // }
 
         Ok(Self {
             name,
@@ -541,7 +542,10 @@ mod tests {
         let root = egraph.add_expr(&start);
 
         fn get(egraph: &EGraph, id: Id) -> Symbol {
-            egraph[id].nodes[0].op
+            match &egraph[id].nodes[0] {
+                SymbolLang::Symb(op, _child) => { return *op; }
+                SymbolLang::Num(_x) => { panic!("Should never run"); }
+            }
         }
 
         #[derive(Debug)]

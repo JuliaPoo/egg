@@ -29,6 +29,11 @@ use thiserror::Error;
 /// See [`SymbolLang`] for quick-and-dirty use cases.
 #[allow(clippy::len_without_is_empty)]
 pub trait Language: Debug + Clone + Eq + Ord + Hash + Send + Sync {
+    // Need the notion of number primitive enode
+    fn enode_num(&self) -> Option<i32>;
+
+    fn num_enode(num: i32) -> Option<Self>; 
+
     /// Returns true if this enode matches another enode.
     /// This should only consider the operator, not the children `Id`s.
     fn matches(&self, other: &Self) -> bool;
@@ -799,6 +804,17 @@ impl SymbolLang {
 }
 
 impl Language for SymbolLang {
+    fn enode_num(&self) -> Option<i32> {
+        match self {
+            Self::Num(a) => { return Some(*a); }
+            _ => { return None;}
+        }
+    }
+
+    fn num_enode(num: i32) -> Option<Self> {
+        return Some(Self::Num(num));
+    }
+
     fn matches(&self, other: &Self) -> bool {
         match (self,other) {
             (Self::Symb(op1,v1),Self::Symb(op2,v2))=> {

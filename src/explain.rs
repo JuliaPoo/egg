@@ -1002,6 +1002,7 @@ impl<L: Language> Explain<L> {
         node_explanation_cache: &mut NodeExplanationCache<L>,
     ) -> TreeExplanation<L> {
         let mut proof = vec![self.node_to_explanation(left, node_explanation_cache)];
+        // let mut proof = vec![];
         let ancestor = self.common_ancestor(left, right);
         let left_nodes = self.get_nodes(left, ancestor);
         let right_nodes = self.get_nodes(right, ancestor);

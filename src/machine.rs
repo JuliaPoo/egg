@@ -350,12 +350,18 @@ impl<L: Language> Program<L> {
                     .vec
                     .iter()
                     // HACK we are reusing Ids here, this is bad
-                    .map(|(v, reg_id)| (*v, machine.reg(Reg(usize::from(*reg_id) as u32))))
+                    .map(|(v, reg_id)| (*v, 
+                            match *reg_id {
+                                Some(x) => { Some(machine.reg(Reg(usize::from(x) as u32))) }
+                                None => { None }
+                            }))
                     .collect();
-                matches.push(Subst { vec: subst_vec });
+                // CURRENT TODO: Here we should iterate over all subst_vec to
+                // find the Num(i), and the max + 1
+                matches.push(Subst { vec: subst_vec, default_val: Id(0) });
             },
         );
-
+        
         log::trace!("Ran program, found {:?}", matches);
         matches
     }

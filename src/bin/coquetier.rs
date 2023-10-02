@@ -98,8 +98,8 @@ impl Server {
         c.insert("&True".to_string(),1.0);
         c.insert("&Prop".to_string(),1.0);
         Self { 
-            // verbose : true,
-            verbose : false,
+            verbose : true,
+            // verbose : false,
 
             infile: infile,
             outfile: outfile,
@@ -108,7 +108,7 @@ impl Server {
                 .with_iter_limit(6)
                 .with_explanations_enabled()
                 .with_node_limit(10000)
-                .with_time_limit(instant::Duration::from_secs(1)),
+                .with_time_limit(instant::Duration::from_secs(5)),
             cost: c,
             require_terms: Vec::new()
         }
@@ -254,7 +254,8 @@ impl Server {
 
     fn lemma_arity(&self, name: &str) -> usize {
         let r = self.rules.iter().find(|r| r.rulename == name).unwrap();
-        r.quantifiers.len() + r.sideconditions.len()
+        let quants : Vec<&String>= r.quantifiers.iter().filter(|s| !s.starts_with("?ffn")).collect();
+        quants.len() + r.sideconditions.len()
     }
 
     fn process_search(&mut self, l: Vec<Sexp>) -> () {
@@ -294,7 +295,8 @@ impl Server {
             for subst in &search_match.substs {
                 writeln!(writer, "(* Substitution suggested *)").expect("failed to write to writer");
                 for (var,id) in &subst.vec {
-                    let (_best_cost, best) = extractor.find_best(*id);
+                    let id = id.unwrap();
+                    let (_best_cost, best) = extractor.find_best(id);
                     let sbest = format!("{}",best);
                     let sexpbest = symbolic_expressions::parser::parse_str(&sbest).unwrap(); 
                     let processed = holify_aux(&sexpbest);
@@ -308,7 +310,22 @@ impl Server {
     // l = ["minimize", expr, ffn_limit]
     fn process_minimize(&mut self, l: Vec<Sexp>) -> () {
         let expr: RecExpr<SymbolLang> = l[1].to_string().parse().unwrap();
+        let expr0: RecExpr<SymbolLang> = "0".to_string().parse().unwrap();
+        let expr1: RecExpr<SymbolLang> = "1".to_string().parse().unwrap();
+        let expr2: RecExpr<SymbolLang> = "2".to_string().parse().unwrap();
+        let expr3: RecExpr<SymbolLang> = "3".to_string().parse().unwrap();
+        let expr4: RecExpr<SymbolLang> = "4".to_string().parse().unwrap();
+        let expr5: RecExpr<SymbolLang> = "5".to_string().parse().unwrap();
+        let expr6: RecExpr<SymbolLang> = "6".to_string().parse().unwrap();
+        self.runner.add_expr(&expr0);
+        self.runner.add_expr(&expr1);
+        self.runner.add_expr(&expr2);
+        self.runner.add_expr(&expr3);
+        self.runner.add_expr(&expr4);
+        self.runner.add_expr(&expr5);
+        self.runner.add_expr(&expr6);
         self.runner.add_expr(&expr);
+
         // let ffn_limit: Ffn = l[2].i().unwrap().try_into().unwrap();
         // self.runner.ffn_limit = ffn_limit;
         let rewrites: Vec<Rewrite<SymbolLang, ()>> = self.rules.iter().map(|r| r.to_rewrite()).collect();
@@ -346,7 +363,7 @@ impl Server {
                                                     ((kronecker(length ,idx),0.),e.clone())).collect();
         let extractor = Extractor::new(&self.runner.egraph, MotivateTrue{motivated: &self.cost, number_appear: to_search.len()}, to_search);
         let (best_cost, best) = extractor.find_best(root);
-        // println!("Simplified\n{}\nto\n{}\nwith cost {}", expr, best, best_cost);
+        println!("Simplified\n{}\nto\n{}\nwith cost {}", expr, best, best_cost.1);
         let mut ctor_equals = None;
 
         if best_cost.1 != 6.0 {
@@ -413,16 +430,22 @@ impl Server {
 
     pub fn run_on_reader(&mut self, reader: &mut dyn BufRead) -> () {
         // Add a generic type embedding collapse
-      
+        let sexp = symbolic_expressions::parser::parse_str("(assert(!(forall((?t $U) (?x $U) (?y $U) (?n $U) (?m $U)) (=> (= (annot ?x ?t ?n) (annot ?y ?t ?m)) (= ?x ?y))) :named eggTypeEmbedding))").unwrap();
+        self.process_line(sexp);
+        // Il faut une égalité
+        let sexp = symbolic_expressions::parser::parse_str("(assert(!(forall((?t $U) (?x $U) (?n $U)(?m $U)) (=> (= (annot ?x ?t ?n) (annot ?x ?t ?n)) (= (annot ?x ?t ?m) (annot ?x ?t ?m)) (= (annot ?x ?t ?n) (annot ?x ?t ?m)))) :named eggTypeEmbedding2))").unwrap();
+        // let sexp = symbolic_expressions::parser::parse_str("(assert(!(forall((?t $U) (?x $U) (?n $U)(?m $U)) (=> (annot ?x ?t ?n) (annot ?x ?t ?m) (= (annot ?x ?t ?n) (annot ?x ?t ?m)))) :named eggTypeEmbedding2))").unwrap();
+        self.process_line(sexp);
         loop {
             let mut buffer = String::new();
             let bytes_read = reader.read_line(&mut buffer).expect("failed to read line from stdin");
-            if bytes_read == 0 { break; }
+            if bytes_read == 0 { 
+                
+                break; 
+            }
             let sexp = symbolic_expressions::parser::parse_str(&buffer).unwrap();
             self.process_line(sexp);
         }
-        let sexp = symbolic_expressions::parser::parse_str("(assert(!(forall((?t $U) (?x $U) (?y $U) (?n $U) (?m $U)) (=> (= (annot ?x ?t ?n) (annot ?y ?t ?m)) (= ?x ?y))) :named eggTypeEmbedding))").unwrap();
-        self.process_line(sexp);
     }
 }
 

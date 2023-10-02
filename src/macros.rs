@@ -79,6 +79,9 @@ macro_rules! __define_language {
         $vis enum $name $decl
 
         impl $crate::Language for $name {
+
+            fn enode_num(&self) -> Option<i32> { return None; }
+            fn num_enode(_num: i32) -> Option<Self> { return None; }
             #[inline(always)]
             fn matches(&self, other: &Self) -> bool {
                 ::std::mem::discriminant(self) == ::std::mem::discriminant(other) &&

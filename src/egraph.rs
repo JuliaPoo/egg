@@ -440,23 +440,25 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
                     new_node_q.push(false);
                 }
                 ENodeOrVar::ENode(node) => {
-                    let new_node = node.clone().map_children(|i| new_ids[usize::from(i)]);
-                    let size_before = self.unionfind.size();
-                    let next_id = self.add_internal(new_node);
-                    if self.unionfind.size() > size_before {
-                        new_node_q.push(true);
-                    } else {
-                        new_node_q.push(false);
-                    }
+                // TODO add special case for annot, we should first search if the node already 
+                // Exists with an arbitrary ffn (or pick the smallest ffn that exist?)
+                        let new_node = node.clone().map_children(|i| new_ids[usize::from(i)]);
+                        let size_before = self.unionfind.size();
+                        let next_id = self.add_internal(new_node);
+                        if self.unionfind.size() > size_before {
+                            new_node_q.push(true);
+                        } else {
+                            new_node_q.push(false);
+                        }
 
-                    if let Some(explain) = &mut self.explain {
-                        node.for_each(|child| {
-                            if new_node_q[usize::from(child)] {
-                                explain.set_existance_reason(new_ids[usize::from(child)], next_id);
-                            }
-                        });
-                    }
-                    new_ids.push(next_id);
+                        if let Some(explain) = &mut self.explain {
+                            node.for_each(|child| {
+                                if new_node_q[usize::from(child)] {
+                                    explain.set_existance_reason(new_ids[usize::from(child)], next_id);
+                                }
+                            });
+                        }
+                        new_ids.push(next_id);
                 }
             }
         }
@@ -643,11 +645,6 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
         equiv_eclasses
     }
 
-    /// Returns the far-fetched-ness of an enode
-
-    /// Given a pattern `pat`, which, when instantiated with substitution `subst`,
-    /// already is part of the egraph, return the biggest farfetchedness of any enode
-    /// appearing in the instantiated pattern
 
     /// Given two patterns and a substitution, add the patterns
     /// and union them.

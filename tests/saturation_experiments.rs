@@ -35,7 +35,7 @@ fn simplify<'a>(rules: Vec<Rewrite<SimpleLanguage, ()>>, s: &str, extra_s : Vec<
     let root = runner.roots[0];
 
     // use an Extractor to pick the best element of the root eclass
-    let extractor = Extractor::new(&runner.egraph, AstSize);
+    let extractor = Extractor::new(&runner.egraph, AstSize, vec![]);
     let (best_cost, best) = extractor.find_best(root);
     
     print_eclasses(&runner.egraph);

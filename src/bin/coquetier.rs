@@ -10,6 +10,8 @@ use std::str::FromStr;
 use std::fs::File;
 use std::io::{BufWriter, Write, BufRead};
 use hashbrown::HashMap;
+use std::convert::TryFrom;
+use log::*;
 
 
 
@@ -49,7 +51,7 @@ impl Rule {
         !self.sideconditions.is_empty() || !self.triggers.is_empty()
     }
 
-    pub fn to_rewrite(&self) -> Rewrite<SymbolLang, ()> {
+    pub fn to_rewrite(&self) -> Rewrite<SymbolLang, HashMap<SymbolLang, i32, fxhash::FxBuildHasher>> {
         // if e is (= A B), returns [(name, A); (name, B)]
         // else returns [(name, e)]
         fn multipattern_part(name: &str, e: &Sexp) -> Vec<(Var, PatternAst<SymbolLang>)> {
@@ -87,7 +89,8 @@ struct Server {
     infile : String,
     outfile : String,
     rules: Vec<Rule>,
-    runner: Runner<SymbolLang, ()>,
+    runner: Runner<SymbolLang, HashMap<SymbolLang, i32, fxhash::FxBuildHasher>>, // TODO Analysis: 
+    //  ,
     cost: HashMap<String, f64,  fxhash::FxBuildHasher>,
     require_terms : Vec<RecExpr<SymbolLang>> 
 }
@@ -98,17 +101,17 @@ impl Server {
         c.insert("&True".to_string(),1.0);
         c.insert("&Prop".to_string(),1.0);
         Self { 
-            verbose : true,
-            // verbose : false,
+            // verbose : true,
+            verbose : false,
 
             infile: infile,
             outfile: outfile,
             rules: Default::default(), 
             runner: Runner::default()
-                .with_iter_limit(6)
+                .with_iter_limit(8)
                 .with_explanations_enabled()
                 .with_node_limit(10000)
-                .with_time_limit(instant::Duration::from_secs(5)),
+                .with_time_limit(instant::Duration::from_secs(4)),
             cost: c,
             require_terms: Vec::new()
         }
@@ -262,7 +265,7 @@ impl Server {
         let expr: Pattern<SymbolLang> = l[1].to_string().parse().unwrap();
         // let ffn_limit: Ffn = l[2].i().unwrap().try_into().unwrap();
         // self.runner.ffn_limit = ffn_limit;
-        let rewrites: Vec<Rewrite<SymbolLang, ()>> = self.rules.iter().map(|r| r.to_rewrite()).collect();
+        let rewrites: Vec<Rewrite<SymbolLang, HashMap<SymbolLang, i32, fxhash::FxBuildHasher>>> = self.rules.iter().map(|r| r.to_rewrite()).collect();
         let t = Instant::now();
         self.runner.run_nonchained(rewrites.iter());
         let saturation_time = t.elapsed().as_secs_f64();
@@ -309,6 +312,8 @@ impl Server {
 
     // l = ["minimize", expr, ffn_limit]
     fn process_minimize(&mut self, l: Vec<Sexp>) -> () {
+        let ffn_limit: usize = usize::try_from(l[2].i().unwrap()).unwrap();
+        self.runner.set_iter_limit(ffn_limit + 4);
         let expr: RecExpr<SymbolLang> = l[1].to_string().parse().unwrap();
         let expr0: RecExpr<SymbolLang> = "0".to_string().parse().unwrap();
         let expr1: RecExpr<SymbolLang> = "1".to_string().parse().unwrap();
@@ -326,9 +331,7 @@ impl Server {
         self.runner.add_expr(&expr6);
         self.runner.add_expr(&expr);
 
-        // let ffn_limit: Ffn = l[2].i().unwrap().try_into().unwrap();
-        // self.runner.ffn_limit = ffn_limit;
-        let rewrites: Vec<Rewrite<SymbolLang, ()>> = self.rules.iter().map(|r| r.to_rewrite()).collect();
+        let rewrites: Vec<Rewrite<SymbolLang, HashMap<SymbolLang, i32, fxhash::FxBuildHasher>>> = self.rules.iter().map(|r| r.to_rewrite()).collect();
         let t = Instant::now();
         self.runner.run_nonchained(rewrites.iter());
         let saturation_time = t.elapsed().as_secs_f64();
@@ -363,7 +366,7 @@ impl Server {
                                                     ((kronecker(length ,idx),0.),e.clone())).collect();
         let extractor = Extractor::new(&self.runner.egraph, MotivateTrue{motivated: &self.cost, number_appear: to_search.len()}, to_search);
         let (best_cost, best) = extractor.find_best(root);
-        println!("Simplified\n{}\nto\n{}\nwith cost {}", expr, best, best_cost.1);
+        info!("Simplified\n{}\nto\n{}\nwith cost {}", expr, best, best_cost.1);
         let mut ctor_equals = None;
 
         if best_cost.1 != 6.0 {
@@ -430,12 +433,12 @@ impl Server {
 
     pub fn run_on_reader(&mut self, reader: &mut dyn BufRead) -> () {
         // Add a generic type embedding collapse
-        let sexp = symbolic_expressions::parser::parse_str("(assert(!(forall((?t $U) (?x $U) (?y $U) (?n $U) (?m $U)) (=> (= (annot ?x ?t ?n) (annot ?y ?t ?m)) (= ?x ?y))) :named eggTypeEmbedding))").unwrap();
-        self.process_line(sexp);
-        // Il faut une égalité
-        let sexp = symbolic_expressions::parser::parse_str("(assert(!(forall((?t $U) (?x $U) (?n $U)(?m $U)) (=> (= (annot ?x ?t ?n) (annot ?x ?t ?n)) (= (annot ?x ?t ?m) (annot ?x ?t ?m)) (= (annot ?x ?t ?n) (annot ?x ?t ?m)))) :named eggTypeEmbedding2))").unwrap();
+        // let sexp = symbolic_expressions::parser::parse_str("(assert(!(forall((?t $U) (?x $U) (?y $U) (?n $U) (?m $U)) (=> (= (annot ?x ?t ?n) (annot ?y ?t ?m)) (= ?x ?y))) :named eggTypeEmbedding))").unwrap();
+        // self.process_line(sexp);
+        // // Il faut une égalité
+        // let sexp = symbolic_expressions::parser::parse_str("(assert(!(forall((?t $U) (?x $U) (?n $U)(?m $U)) (=> (= (annot ?x ?t ?n) (annot ?x ?t ?n)) (= (annot ?x ?t ?m) (annot ?x ?t ?m)) (= (annot ?x ?t ?n) (annot ?x ?t ?m)))) :named eggTypeEmbedding2))").unwrap();
         // let sexp = symbolic_expressions::parser::parse_str("(assert(!(forall((?t $U) (?x $U) (?n $U)(?m $U)) (=> (annot ?x ?t ?n) (annot ?x ?t ?m) (= (annot ?x ?t ?n) (annot ?x ?t ?m)))) :named eggTypeEmbedding2))").unwrap();
-        self.process_line(sexp);
+        // self.process_line(sexp);
         loop {
             let mut buffer = String::new();
             let bytes_read = reader.read_line(&mut buffer).expect("failed to read line from stdin");

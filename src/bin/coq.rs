@@ -288,9 +288,9 @@ fn simplify(s: &str, extra_s : Vec<&str>) -> () {
             }
             writeln!(writer, "idtac).");
             writer.flush().expect("error flushing");
-            println!("Wrote proof to {path}");
+            info!("Wrote proof to {path}");
 
-            println!("Simplified\n{}\nto\n{}\nwith cost {}", expr, best, best_cost);
+            info!("Simplified\n{}\nto\n{}\nwith cost {}", expr, best, best_cost);
         }
     }
     println!("Stop reason: {:?}", runner.stop_reason);

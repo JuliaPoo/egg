@@ -1,3 +1,4 @@
+use std::fs::canonicalize;
 use std::ops::{BitOr, Index, IndexMut};
 use std::{cmp::Ordering, convert::TryFrom};
 use std::{
@@ -687,10 +688,13 @@ pub trait Analysis<L: Language>: Sized + Send + Sync{
     /// The per-[`EClass`] data for this analysis.
     type Data: Debug + Send + Sync;
 
+    /// Return ffn for a data analysis
+    fn get_ffn(_a : &Self::Data, enode: &L) -> i32 { return 0; }
+
     /// Makes a new [`Analysis`] for a given enode
     /// [`Analysis`].
     ///
-    fn make(egraph: &EGraph<L, Self>, enode: &L) -> Self::Data;
+    fn make(egraph: &EGraph<L, Self>, enode: &L, ffn: i32) -> Self::Data;
 
     /// An optional hook that allows inspection before a [`union`] occurs.
     ///
@@ -734,14 +738,65 @@ pub trait Analysis<L: Language>: Sized + Send + Sync{
     /// This function is called immediately following
     /// `Analysis::merge` when unions are performed.
     #[allow(unused_variables)]
-    fn modify(egraph: &mut EGraph<L, Self>, id: Id) {}
+    fn modify(egraph: &mut EGraph<L, Self>, id: Id) -> bool { return true; }
 }
 
 impl<L: Language> Analysis<L> for () {
     type Data = ();
-    fn make(_egraph: &EGraph<L, Self>, _enode: &L) -> Self::Data {}
+    fn get_ffn(_a : &(), _b: &L) -> i32 { return 0; }
+    fn make(_egraph: &EGraph<L, Self>, _enode: &L, ffn: i32) -> Self::Data {}
     fn merge(&mut self, _: &mut Self::Data, _: Self::Data) -> DidMerge {
         DidMerge(false, false)
+    }
+}
+
+impl Analysis<SymbolLang> for HashMap<SymbolLang, i32> {
+    type Data = HashMap<SymbolLang, i32>;
+
+    fn get_ffn(map : &Self::Data, enode: &SymbolLang) -> i32 { 
+        return *map.get(enode).unwrap_or(&0);
+        // return 0;
+     }
+    fn make(_egraph: &EGraph<SymbolLang, Self>, enode: &SymbolLang, ffn: i32) -> Self::Data {
+        // In the egraph we should keep track of the current ffn level? This is not good enough.
+        // we should pass another value to build the analysis
+        let mut m : Self::Data = Default::default();
+        m.insert(enode.clone(),ffn);
+        return m;
+    }
+
+    fn merge(&mut self, a: &mut Self::Data, b: Self::Data) -> DidMerge {
+        // Merge is straightforward: key are merged the same way that classes
+        // are merged (enodes are canonicalized), and the values are min-ed together
+        // DidMerge(false, false)
+        let mut change = false;
+        for (key, value) in b {
+            if let Some(v) = a.get(&key) {
+                if value != *v { change = true; }
+                a.insert(key, std::cmp::min(value,*v));
+            } else {
+                a.insert(key, value);
+            }
+        }
+        DidMerge(change, false)
+    }
+
+    // fn pre_union(egraph: &EGraph<L, Self>, id1: Id, id2: Id) {}
+    fn modify(egraph: &mut EGraph<SymbolLang, Self>, id: Id) -> bool { 
+        let mut m : Self::Data = Default::default();
+        let mut change = false;
+        for (key, value) in &egraph[id].data {
+            let normalized_key = key.clone().map_children(|i| egraph.find(i));
+            if let Some(v) = m.get(&normalized_key) {
+                if v != value { change = true; }
+                m.insert(normalized_key, std::cmp::min(*value,*v));
+
+            } else {
+                m.insert(normalized_key, *value);
+            }
+        }
+        egraph[id].data = m;
+        return change;
     }
 }
 

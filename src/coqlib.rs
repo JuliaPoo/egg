@@ -41,7 +41,11 @@ fn add_arity_th_name(lemma_arity: &dyn Fn(&str) -> usize, e: &Sexp) -> Sexp {
                     Sexp::String(s.clone().replace("-rev", ""))
                 } else {
                     let mut v = vec![e.clone()];
-                    let arg_implicit_aux = ["_"].repeat(number);
+                    let mut arg_implicit_aux = ["_"].repeat(number);
+                    if s == "eggTypeEmbedding" {
+                        arg_implicit_aux.clear();
+                        arg_implicit_aux = vec!["_", "_", "_", "O", "O", "_"];
+                    }
                     let arg_implicit = arg_implicit_aux
                         .iter()
                         .map(|s| Sexp::String(s.to_string()))

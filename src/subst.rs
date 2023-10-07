@@ -54,7 +54,9 @@ pub struct Subst {
     /// Internal map of the substitution
     pub vec: smallvec::SmallVec<[(Var, Option<Id>); 3]>,
     /// Default mapping of the substitution
-    pub default_val: Id 
+    pub default_val: Id,
+    /// Default ffn of the substitution
+    pub ffn: i32
 }
 
 impl Subst {
@@ -63,6 +65,7 @@ impl Subst {
         Self {
             vec: smallvec::SmallVec::with_capacity(capacity),
             default_val: Id(0),
+            ffn: 0,
         }
     }
 
@@ -83,6 +86,10 @@ impl Subst {
     /// Set default
     pub fn set_default(&mut self, id: Id) {
         self.default_val = id
+    }
+/// Set default
+    pub fn set_ffn(&mut self, id: i32) {
+        self.ffn = id
     }
 
 

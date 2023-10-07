@@ -283,27 +283,29 @@ impl<'a, L: Language> SearchMatches<'a, L> {
         let all_substs = &mut self.substs.clone();
         self.substs.clear();
         for i in all_substs {
-            let x = &i.vec;
-            let mut m = 0;
-            for (_v,sid ) in x {
-                match sid {
-                    Some(id) => {
-                        let eclass = &_egraph[*id].nodes;
-                        for i in eclass.iter() {
-                            match i.enode_num() {
-                                Some(x) => { m = std::cmp::max(m,x); }
-                                None => {}
-                            }
-                        }
-                    }
-                    None => {}
-                }
-            }
-            if m < 6 {
-                let n = L::num_enode(m+1).unwrap();
+            // let x = &i.vec;
+            // let mut m = 0;
+            // for (_v,sid ) in x {
+            //     match sid {
+            //         Some(id) => {
+            //             let eclass = &_egraph[*id].nodes;
+            //             for i in eclass.iter() {
+            //                 match i.enode_num() {
+            //                     Some(x) => { m = std::cmp::max(m,x); }
+            //                     None => {}
+            //                 }
+            //             }
+            //         }
+            //         None => {}
+            //     }
+            // }
+            if i.ffn < 4 {
+                // let n = L::num_enode(m+1).unwrap();
+                let n = L::num_enode(0).unwrap();
                 let id_n = _egraph.lookup(n).unwrap();
                 // let mut newi = i.clone();
                 i.set_default(id_n);
+                i.set_ffn(i.ffn+1);
                 self.substs.push(i.clone());
             }
          }
@@ -371,7 +373,7 @@ where
         &self,
         egraph: &mut EGraph<L, A>,
         matches: &[SearchMatches<L>],
-        rule_name: Symbol,
+        rule_name: Symbol
     ) -> Vec<Id> {
         let mut added = vec![];
         let ast = self.ast.as_ref();
@@ -432,7 +434,7 @@ where
     }
 }
 
-// Observation, this is never called
+// Observation, this is never called?
 pub(crate) fn apply_pat<L: Language, A: Analysis<L>>(
     ids: &mut [Id],
     pat: &[ENodeOrVar<L>],
@@ -454,7 +456,8 @@ pub(crate) fn apply_pat<L: Language, A: Analysis<L>>(
             ENodeOrVar::ENode(e) => {
                 let n = e.clone().map_children(|child| ids[usize::from(child)]);
                 trace!("adding: {:?}", n);
-                egraph.add_with_farfetchedness(n)
+                let ffn= subst.ffn;
+                egraph.add_with_farfetchedness(n, ffn) // TODO PROBABLY unecessary
             }
         };
         ids[i] = id;
@@ -480,6 +483,7 @@ mod tests {
             &"(+ z w)".parse().unwrap(),
             &Default::default(),
             "union_plus".to_string(),
+            0
         );
         egraph.rebuild();
 

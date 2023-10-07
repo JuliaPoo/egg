@@ -33,6 +33,7 @@ pub fn print_eclasses_to_writer<W: Write, L: Language + std::fmt::Display, N: An
                 writeln!(w, "- {s}");
             }
         }
+        writeln!(w, "class analysis: {:?}", class.data);
     }
     writeln!(w, "");
     w.flush().expect("error flushing");

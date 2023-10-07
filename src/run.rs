@@ -337,6 +337,14 @@ where
         Self { iter_limit, ..self }
     }
 
+    /// Sets the iteration limit. Default: 30
+    pub fn set_iter_limit(&mut self, iter_limit_new: usize) -> () {
+        self.iter_limit = iter_limit_new;
+        // Self { iter_limit, ..self }
+    }
+
+
+
     /// Sets the egraph size limit (in enodes). Default: 10,000
     pub fn with_node_limit(self, node_limit: usize) -> Self {
         Self { node_limit, ..self }
@@ -397,7 +405,7 @@ where
 
     /// Like with_expr, but does not consume & return self
     pub fn add_expr(&mut self, expr: &RecExpr<L>) -> () {
-        let id = self.egraph.add_expr(expr);
+        let id = self.egraph.add_expr(expr, 0); // FFN This one should be ok
         self.roots.push(id);
     }
 
@@ -408,7 +416,7 @@ where
     /// insertion order.
     pub fn with_exprs(mut self, exprs: Vec<&RecExpr<L>>) -> Self {
         for expr in exprs {
-            let id = self.egraph.add_expr(expr);
+            let id = self.egraph.add_expr(expr, 0);
             self.roots.push(id);
         }
         self
@@ -443,21 +451,22 @@ where
     {
         // Split the rules for annotations and the rest
         let rules_pre: Vec<&Rewrite<L, N>> = rules.into_iter().collect();
-        let rules = rules_pre[1..].to_vec();
-        let rules_annot: Vec<&Rewrite<L, N>> = rules_pre[0..=1].to_vec();
+        let rules = rules_pre[0..].to_vec();
+        // let rules_annot: Vec<&Rewrite<L, N>> = rules_pre[0..1].to_vec();
         check_rules(&rules);
         self.egraph.rebuild();
         loop {
-            loop {
-                let iter = self.run_one(&rules_annot);
-                let stop_reason = iter.stop_reason.clone();
-                // we need to check_limits after the iteration is complete to check for iter_limit
-                if let Some(stop_reason) = stop_reason.or_else(|| self.check_limits().err()) {
-                    info!("Stopping inner loop: {:?}", stop_reason);
-                    // self.stop_reason = Some(stop_reason);
-                    break;
-                }
-            }
+            // info!("Starting new outer loop: ");
+            // loop {
+            //     let iter = self.run_one(&rules_annot);
+            //     let stop_reason = iter.stop_reason.clone();
+            //     // we need to check_limits after the iteration is complete to check for iter_limit
+            //     if let Some(stop_reason) = stop_reason.or_else(|| self.check_limits().err()) {
+            //         info!("Stopping inner loop: {:?}", stop_reason);
+            //         // self.stop_reason = Some(stop_reason);
+            //         break;
+            //     }
+            // }
             let iter = self.run_one(&rules);
             self.iterations.push(iter);
             let stop_reason = self.iterations.last().unwrap().stop_reason.clone();
@@ -467,6 +476,15 @@ where
                 self.stop_reason = Some(stop_reason);
                 break;
             }
+          
+            // // TODO search for all the (annot id1 id2 ffn) and only keep the smallest
+            // let classes = self.egraph.classes_mut();
+            // let enode_to_delete = 
+            // for c in classes {
+
+            // }
+            
+           
         }
 
         assert!(!self.iterations.is_empty());
@@ -644,8 +662,10 @@ where
         let apply_time = apply_time.elapsed().as_secs_f64();
         info!("Apply time: {}", apply_time);
 
+        info!("Start rebuild");
         let rebuild_time = Instant::now();
         let n_rebuilds = self.egraph.rebuild();
+        info!("Finished rebuild");
         // if self.egraph.are_explanations_enabled() {
             // debug_assert!(self.egraph.check_each_explain(rules));
         // }

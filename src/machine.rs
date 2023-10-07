@@ -82,21 +82,26 @@ impl Machine {
         &mut self,
         egraph: &EGraph<L, N>,
         instructions: &[Instruction<L>],
+        ffn: i32,
         subst: &Subst,
-        yield_fn: &mut impl FnMut(&Self, &Subst),
+        yield_fn: &mut impl FnMut(&Self, &Subst, i32),
     ) where
         L: Language,
         N: Analysis<L>,
     {
         let mut instructions = instructions.iter();
+        let mut new_ffn = ffn; 
         while let Some(instruction) = instructions.next() {
             match instruction {
                 Instruction::Bind { i, out, node } => {
                     let remaining_instructions = instructions.as_slice();
                     return for_each_matching_node(&egraph[self.reg(*i)], node, |matched| {
+                        let data = &egraph[self.reg(*i)].data;
+                        let d = N::get_ffn( data, node); 
+                        new_ffn = std::cmp::max(d,new_ffn);
                         self.reg.truncate(out.0 as usize);
                         matched.for_each(|id| self.reg.push(id));
-                        self.run(egraph, remaining_instructions, subst, yield_fn)
+                        self.run(egraph, remaining_instructions, new_ffn, subst, yield_fn)
                     });
                 }
                 Instruction::Scan { out } => {
@@ -104,7 +109,7 @@ impl Machine {
                     for class in egraph.classes() {
                         self.reg.truncate(out.0 as usize);
                         self.reg.push(class.id);
-                        self.run(egraph, remaining_instructions, subst, yield_fn)
+                        self.run(egraph, remaining_instructions, new_ffn, subst, yield_fn)
                     }
                     return;
                 }
@@ -118,9 +123,17 @@ impl Machine {
                     for node in term {
                         match node {
                             ENodeOrReg::ENode(node) => {
+                                // TODO find ffn
+                                // get_ffn(_a : ()) -> i32 { return 0; }
                                 let look = |i| self.lookup[usize::from(i)];
                                 match egraph.lookup(node.clone().map_children(look)) {
-                                    Some(id) => self.lookup.push(id),
+                                    Some(id) => { 
+                                        let data = &egraph[id].data;
+                                        let d = N::get_ffn( data, node); 
+                                        new_ffn = std::cmp::max(d,new_ffn);
+                                        // TODO update new_ffn
+                                        self.lookup.push(id)
+                                    },
                                     None => return,
                                 }
                             }
@@ -138,7 +151,7 @@ impl Machine {
             }
         }
 
-        yield_fn(self, subst)
+        yield_fn(self, subst, new_ffn)
     }
 }
 
@@ -344,8 +357,9 @@ impl<L: Language> Program<L> {
         machine.run(
             egraph,
             &self.instructions,
+            0,
             &self.subst,
-            &mut |machine, subst| {
+            &mut |machine, subst, ffn| {
                 let subst_vec = subst
                     .vec
                     .iter()
@@ -358,7 +372,7 @@ impl<L: Language> Program<L> {
                     .collect();
                 // CURRENT TODO: Here we should iterate over all subst_vec to
                 // find the Num(i), and the max + 1
-                matches.push(Subst { vec: subst_vec, default_val: Id(0) });
+                matches.push(Subst { vec: subst_vec, default_val: Id(0), ffn: ffn });
             },
         );
         

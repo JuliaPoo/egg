@@ -249,10 +249,10 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
         // let left = self.lookup_expr(left).expect("left expr not found, use add_expr before calling explain_equivalence");
         // let right = self.lookup_expr(right).expect("right expr not found, use add_expr before calling explain_equivalence");
         // TODO this should not require an ffn value!
-        let left = self.add_expr_internal(left);
+        let left = self.add_expr_internal(left, 0);
         // let left = self.add_expr_internal(left, ffn_zero());
         // let right = self.add_expr_internal(right, ffn_zero());
-        let right = self.add_expr_internal(right);
+        let right = self.add_expr_internal(right, 0);
         if let Some(explain) = &mut self.explain {
             explain.explain_equivalence(left, right)
         } else {
@@ -388,21 +388,29 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
     /// ```
     ///
     /// [`add_expr`]: EGraph::add_expr()
-    pub fn add_expr(&mut self, expr: &RecExpr<L>) -> Id {
-        let id = self.add_expr_internal(expr);
+    pub fn add_expr(&mut self, expr: &RecExpr<L>, ffn: i32) -> Id {
+        let id = self.add_expr_internal(expr, ffn);
         self.find(id)
     }
 
+    // pub fn ffn_of_enode(&self, enode: &L) -> Option<i32> {
+    //     if let Some(id) = self.lookup_internal(enode.clone()) {
+    //         self.farfetchedness.get(&id)
+    //     } else {
+    //         None
+    //     }
+    // }
+
     /// Adds an expr to the egraph, and returns the uncanonicalized id of the top enode.
     // fn add_expr_internal(&mut self, expr: &RecExpr<L>, ffn: Ffn) -> Id {
-    fn add_expr_internal(&mut self, expr: &RecExpr<L>) -> Id {
+    fn add_expr_internal(&mut self, expr: &RecExpr<L>, ffn:i32) -> Id {
         let nodes = expr.as_ref();
         let mut new_ids = Vec::with_capacity(nodes.len());
         let mut new_node_q = Vec::with_capacity(nodes.len());
         for node in nodes {
             let new_node = node.clone().map_children(|i| new_ids[usize::from(i)]);
             let size_before = self.unionfind.size();
-            let next_id = self.add_internal(new_node);
+            let next_id = self.add_internal(new_node, ffn);
             if self.unionfind.size() > size_before {
                 new_node_q.push(true);
             } else {
@@ -444,7 +452,7 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
                 // Exists with an arbitrary ffn (or pick the smallest ffn that exist?)
                         let new_node = node.clone().map_children(|i| new_ids[usize::from(i)]);
                         let size_before = self.unionfind.size();
-                        let next_id = self.add_internal(new_node);
+                        let next_id = self.add_internal(new_node, subst.ffn);
                         if self.unionfind.size() > size_before {
                             new_node_q.push(true);
                         } else {
@@ -539,19 +547,19 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
     ///
     /// [`add`]: EGraph::add()
     pub fn add(&mut self, enode: L) -> Id {
-        self.add_with_farfetchedness(enode)
+        self.add_with_farfetchedness(enode,0)
     }
 
     #[allow(missing_docs)]
-    pub fn add_with_farfetchedness(&mut self, enode: L) -> Id {
-        let id = self.add_internal(enode);
+    pub fn add_with_farfetchedness(&mut self, enode: L, ffn: i32) -> Id {
+        let id = self.add_internal(enode, ffn);
         self.find(id)
     }
 
     /// Adds an enode to the egraph and also returns the the enode's id (uncanonicalized).
     // fn add_internal(&mut self, enode: L, ffn: Ffn) -> Id {
-    fn add_internal(&mut self, enode: L) -> Id {
-        let id = self.add_internal_without_ffn(enode);
+    fn add_internal(&mut self, enode: L, ffn: i32) -> Id {
+        let id = self.add_internal_without_ffn(enode,ffn);
         // if let Some(ffn_ptr) = self.farfetchedness.get_mut(&id) {
         //     *ffn_ptr = ffn_min(ffn, *ffn_ptr);
         // } else {
@@ -562,7 +570,7 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
     }
 
     /// Adds an enode to the egraph and also returns the the enode's id (uncanonicalized).
-    fn add_internal_without_ffn(&mut self, mut enode: L) -> Id {
+    fn add_internal_without_ffn(&mut self, mut enode: L, ffn: i32) -> Id {
         let original = enode.clone();
         if let Some(existing_id) = self.lookup_internal(&mut enode) {
             let id = self.find(existing_id);
@@ -581,7 +589,7 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
                 existing_id
             }
         } else {
-            let id = self.make_new_eclass(enode);
+            let id = self.make_new_eclass(enode, ffn);
             if let Some(explain) = self.explain.as_mut() {
                 explain.add(original, id, id);
             }
@@ -594,13 +602,13 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
     }
 
     /// This function makes a new eclass in the egraph (but doesn't touch explanations)
-    fn make_new_eclass(&mut self, enode: L) -> Id {
+    fn make_new_eclass(&mut self, enode: L, ffn:i32) -> Id {
         let id = self.unionfind.make_set();
         log::trace!("  ...adding to {}", id);
         let class = EClass {
             id,
             nodes: vec![enode.clone()],
-            data: N::make(self, &enode),
+            data: N::make(self, &enode, ffn),
             parents: Default::default(),
         };
 
@@ -925,14 +933,22 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
             }
 
             while let Some((node, class_id)) = self.analysis_pending.pop() {
+
+                info!("Upward Merging triggers rebuild {}",class_id);
+                // This is upward closure, the parent enodes have been updated, so we need to update the class analysis
+                // The ffn to pick is the one that was 
                 let class_id = self.find_mut(class_id);
-                let node_data = N::make(self, &node);
+                let ffn = 1000; // We should never keep this newly created ffn, the analysis will be normalized by merge
+                let node_data = N::make(self, &node, ffn);
                 let class = self.classes.get_mut(&class_id).unwrap();
 
                 let did_merge = self.analysis.merge(&mut class.data, node_data);
                 if did_merge.0 {
-                    self.analysis_pending.extend(class.parents.iter().cloned());
-                    N::modify(self, class_id)
+                    let modified = N::modify(self, class_id);
+                    if  modified {
+                        let class = self.classes.get_mut(&class_id).unwrap();
+                        self.analysis_pending.extend(class.parents.iter().cloned());
+                    }
                 }
             }
         }
@@ -1057,7 +1073,7 @@ mod tests {
             &"x".parse().unwrap(),
             &"y".parse().unwrap(),
             &Default::default(),
-            "union x and y".to_string()
+            "union x and y".to_string(), 0
         );
         egraph.rebuild();
     }

@@ -282,7 +282,7 @@ where
         &self,
         egraph: &mut EGraph<L, N>,
         matches: &[SearchMatches<L>],
-        rule_name: Symbol,
+        rule_name: Symbol
     ) -> Vec<Id> {
         let mut added = vec![];
         for mat in matches {
@@ -322,7 +322,7 @@ where
         eclass: Id,
         subst: &Subst,
         searcher_ast: Option<&PatternAst<L>>,
-        rule_name: Symbol
+        rule_name: Symbol,
     ) -> Vec<Id>;
 
     /// Returns a list of variables that this Applier assumes are bound.
@@ -372,7 +372,7 @@ where
         eclass: Id,
         subst: &Subst,
         searcher_ast: Option<&PatternAst<L>>,
-        rule_name: Symbol
+        rule_name: Symbol,
     ) -> Vec<Id> {
         if self.condition.check(egraph, eclass, subst) {
             self.applier

@@ -460,6 +460,11 @@ fn main() {
     env_logger::init();
     let mut server = Server::new(infile.to_string(), outfile.to_string());
     let use_stdin = false;
+    match env::var("EGG_VERBOSE")  {
+        Ok(v) => server.verbose=true,
+        Err(e) => {}
+    }
+
     if use_stdin {
         server.run_on_reader(&mut io::stdin().lock());
     } else {

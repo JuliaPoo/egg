@@ -6,6 +6,7 @@ use std::{
 
 #[cfg(feature = "serde-1")]
 use ::serde::{Deserialize, Serialize};
+use std::env;
 
 use log::*;
 
@@ -83,6 +84,7 @@ You must call [`EGraph::rebuild`] after deserializing an e-graph!
 pub struct EGraph<L: Language, N: Analysis<L>> {
     /// The `Analysis` given when creating this `EGraph`.
     pub analysis: N,
+    pub max_ffn: i32,
     /// The `Explain` used to explain equivalences in this `EGraph`.
     pub(crate) explain: Option<Explain<L>>,
     unionfind: UnionFind,
@@ -141,8 +143,10 @@ impl<L: Language, N: Analysis<L>> Debug for EGraph<L, N> {
 impl<L: Language, N: Analysis<L>> EGraph<L, N> {
     /// Creates a new, empty `EGraph` with the given `Analysis`
     pub fn new(analysis: N) -> Self {
+        info!("Initialization ffn {:?}", env::var("EGG_FFN").unwrap_or("4".to_string()));
         Self {
             analysis,
+            max_ffn: env::var("EGG_FFN").unwrap_or("4".to_string()).parse().unwrap(),
             classes: Default::default(),
             unionfind: Default::default(),
             clean: false,

@@ -276,7 +276,7 @@ impl<'a, L: Language> SearchMatches<'a, L> {
     /// and record the far-fetchedness of each term in ffns.
     pub fn compute_and_filter_ffns<N: Analysis<L>>(
         &mut self,
-        _egraph: &EGraph<L, N>,
+        egraph: &EGraph<L, N>,
         _searcher: &std::sync::Arc<dyn Searcher<L, N> + Sync + Send>,
     ) -> () {
         // self.ffns.resize(self.substs.len(), 0); // <-- to disable ffn restrictions
@@ -299,10 +299,11 @@ impl<'a, L: Language> SearchMatches<'a, L> {
             //         None => {}
             //     }
             // }
-            if i.ffn < 4 {
+            info!("Comparing ffns: {} <? {}",i.ffn, egraph.max_ffn);
+            if i.ffn < egraph.max_ffn {
                 // let n = L::num_enode(m+1).unwrap();
                 let n = L::num_enode(0).unwrap();
-                let id_n = _egraph.lookup(n).unwrap();
+                let id_n = egraph.lookup(n).unwrap();
                 // let mut newi = i.clone();
                 i.set_default(id_n);
                 i.set_ffn(i.ffn+1);

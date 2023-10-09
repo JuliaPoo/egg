@@ -5,3 +5,11 @@ Build the coquetier:
 
 
 Set a symlink between /opt/link_to_egg and the folder $ROOT/coq/Coquetier/egg
+
+
+Options through env variable: EGG_FFN=2 RUST_LOG=info EGG_VERBOSE=1
+The number of iterations is also passed as part of a minimize target
+To set the ffn number: 
+```
+Set Egg Ffn 5.
+```

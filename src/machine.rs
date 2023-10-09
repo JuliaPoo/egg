@@ -96,8 +96,12 @@ impl Machine {
                 Instruction::Bind { i, out, node } => {
                     let remaining_instructions = instructions.as_slice();
                     return for_each_matching_node(&egraph[self.reg(*i)], node, |matched| {
+                        // Bind enode does not matter as node is fixed, it is just for the constructor
                         let data = &egraph[self.reg(*i)].data;
-                        let d = N::get_ffn( data, node); 
+                        // let look = |i| egraph.find(i);
+                        // let cano_enode = matched.clone().map_children(look);
+                        let cano_enode = matched;
+                        let d = N::get_ffn(data, cano_enode); 
                         new_ffn = std::cmp::max(d,new_ffn);
                         self.reg.truncate(out.0 as usize);
                         matched.for_each(|id| self.reg.push(id));
@@ -129,7 +133,9 @@ impl Machine {
                                 match egraph.lookup(node.clone().map_children(look)) {
                                     Some(id) => { 
                                         let data = &egraph[id].data;
-                                        let d = N::get_ffn( data, node); 
+                                        // Should already be canonical
+                                        let cano_enode = node.clone().map_children(look);
+                                        let d = N::get_ffn( data, &cano_enode); 
                                         new_ffn = std::cmp::max(d,new_ffn);
                                         // TODO update new_ffn
                                         self.lookup.push(id)

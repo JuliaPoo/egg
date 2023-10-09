@@ -7,6 +7,7 @@ use std::{
 };
 use std::{hash::Hash, str::FromStr};
 
+use log::*;
 use crate::*;
 
 use fmt::Formatter;
@@ -754,7 +755,9 @@ impl Analysis<SymbolLang> for HashMap<SymbolLang, i32> {
     type Data = HashMap<SymbolLang, i32>;
 
     fn get_ffn(map : &Self::Data, enode: &SymbolLang) -> i32 { 
-        return *map.get(enode).unwrap_or(&0);
+        let s = map.get(enode);
+        info!("Try to search enode: {:?} ffn: {:?}", enode, s);
+        return *s.unwrap_or(&0);
         // return 0;
      }
     fn make(_egraph: &EGraph<SymbolLang, Self>, enode: &SymbolLang, ffn: i32) -> Self::Data {

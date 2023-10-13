@@ -50,22 +50,22 @@ impl Debug for Var {
 #[derive(Default, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 /// A substitition mapping [`Var`]s to eclass [`Id`]s.
 ///
-pub struct Subst {
+pub struct Subst<T: FfnLattice> {
     /// Internal map of the substitution
     pub vec: smallvec::SmallVec<[(Var, Option<Id>); 3]>,
     /// Default mapping of the substitution
     pub default_val: Id,
     /// Default ffn of the substitution
-    pub ffn: i32
+    pub ffn: T
 }
 
-impl Subst {
+impl<T: FfnLattice> Subst<T> {
     /// Create a `Subst` with the given initial capacity
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             vec: smallvec::SmallVec::with_capacity(capacity),
             default_val: Id(0),
-            ffn: 0,
+            ffn: T::default(),
         }
     }
 
@@ -88,7 +88,7 @@ impl Subst {
         self.default_val = id
     }
 /// Set default
-    pub fn set_ffn(&mut self, id: i32) {
+    pub fn set_ffn(&mut self, id: T) {
         self.ffn = id
     }
 
@@ -105,7 +105,7 @@ impl Subst {
     }
 }
 
-impl std::ops::Index<Var> for Subst {
+impl<T: FfnLattice> std::ops::Index<Var> for Subst<T> {
     type Output = Id;
 
     fn index(&self, var: Var) -> &Self::Output {
@@ -117,7 +117,7 @@ impl std::ops::Index<Var> for Subst {
     }
 }
 
-impl Debug for Subst {
+impl<T: FfnLattice> Debug for Subst<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let len = self.vec.len();
         write!(f, "{{")?;

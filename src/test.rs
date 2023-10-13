@@ -25,17 +25,18 @@ where
 }
 
 #[allow(clippy::type_complexity)]
-pub fn test_runner<L, A>(
+pub fn test_runner<L, T, A>(
     _name: &str,
-    runner: Option<Runner<L, A, ()>>,
-    rules: &[Rewrite<L, A>],
+    runner: Option<Runner<L, T, A, ()>>,
+    rules: &[Rewrite<L, T, A>],
     start: RecExpr<L>,
-    goals: &[Pattern<L>],
-    check_fn: Option<fn(Runner<L, A, ()>)>,
+    goals: &[Pattern<L,T>],
+    check_fn: Option<fn(Runner<L, T, A, ()>)>,
     should_check: bool,
 ) where
     L: Language + Display + 'static,
-    A: Analysis<L> + Default,
+    T: FfnLattice + 'static,
+    A: Analysis<L, T> + Default,
 {
     let mut runner = runner.unwrap_or_default();
 
@@ -67,7 +68,7 @@ pub fn test_runner<L, A>(
         runner = runner.with_hook(move |r| {
             if goals
                 .iter()
-                .all(|g: &Pattern<_>| g.search_eclass(&r.egraph, id).is_some())
+                .all(|g: &Pattern<_, _>| g.search_eclass(&r.egraph, id).is_some())
             {
                 Err("Done".into())
             } else {
@@ -112,17 +113,18 @@ fn percentile(k: f64, data: &[u128]) -> u128 {
     data[i]
 }
 
-pub fn bench_egraph<L, N>(
+pub fn bench_egraph<L, T, N>(
     _name: &str,
-    rules: Vec<Rewrite<L, N>>,
+    rules: Vec<Rewrite<L, T, N>>,
     exprs: &[&str],
     extra_patterns: &[&str],
-) -> EGraph<L, N>
+) -> EGraph<L, T, N>
 where
     L: Language + FromOp + 'static + Display,
-    N: Analysis<L> + Default + 'static,
+    T: FfnLattice,
+    N: Analysis<L,T> + Default + 'static,
 {
-    let mut patterns: Vec<Pattern<L>> = vec![];
+    let mut patterns: Vec<Pattern<L,T>> = vec![];
     for rule in &rules {
         if let Some(ast) = rule.searcher.get_pattern_ast() {
             patterns.push(ast.alpha_rename().into())
@@ -132,7 +134,7 @@ where
         }
     }
     for extra in extra_patterns {
-        let p: Pattern<L> = extra.parse().unwrap();
+        let p: Pattern<L,T> = extra.parse().unwrap();
         patterns.push(p.ast.alpha_rename().into());
     }
 
@@ -176,7 +178,7 @@ where
     eprintln!("{}", runner.report());
     let egraph = runner.egraph;
 
-    let get_len = |pat: &Pattern<L>| pat.to_string().len();
+    let get_len = |pat: &Pattern<L, T>| pat.to_string().len();
     let max_width = patterns.iter().map(get_len).max().unwrap_or(0);
     for pat in &patterns {
         let mut times: Vec<u128> = (0..n_samples)

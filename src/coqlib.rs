@@ -108,7 +108,7 @@ fn holify(lemma_arity: &dyn Fn(&str) -> usize, e: &Sexp) -> (Sexp, bool, String,
 }
 
 ///  Return two terms that start with distinct constructors but are in the same eclass
-pub fn find_distinct_ctor_equals<L: Language + std::fmt::Display, N: Analysis<L>>(eg: &EGraph<L, N>) -> Option<(String, String)> {
+pub fn find_distinct_ctor_equals<L: Language + std::fmt::Display, T: FfnLattice, N: Analysis<L,T>>(eg: &EGraph<L, T, N>) -> Option<(String, String)> {
     let extractor = Extractor::new(eg, AstSize,[].to_vec());
     let classes : Vec<&EClass<L, _>> = eg.classes().collect();
     for class in classes {

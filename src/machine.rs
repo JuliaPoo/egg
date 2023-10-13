@@ -11,9 +11,9 @@ struct Machine {
 struct Reg(u32);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Program<L> {
+pub struct Program<L,T: FfnLattice> {
     instructions: Vec<Instruction<L>>,
-    subst: Subst,
+    subst: Subst<T>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -78,16 +78,17 @@ impl Machine {
         self.reg[reg.0 as usize]
     }
 
-    fn run<L, N>(
+    fn run<L, T, N>(
         &mut self,
-        egraph: &EGraph<L, N>,
+        egraph: &EGraph<L, T, N>,
         instructions: &[Instruction<L>],
-        ffn: i32,
-        subst: &Subst,
-        yield_fn: &mut impl FnMut(&Self, &Subst, i32),
+        ffn: T,
+        subst: &Subst<T>,
+        yield_fn: &mut impl FnMut(&Self, &Subst<T>, T),
     ) where
         L: Language,
-        N: Analysis<L>,
+        T: FfnLattice,
+        N: Analysis<L,T>,
     {
         let mut instructions = instructions.iter();
         let mut new_ffn = ffn; 
@@ -102,7 +103,7 @@ impl Machine {
                         // let cano_enode = matched.clone().map_children(look);
                         let cano_enode = matched;
                         let d = N::get_ffn(data, cano_enode); 
-                        new_ffn = std::cmp::max(d,new_ffn);
+                        new_ffn = T::merge(d,new_ffn);
                         self.reg.truncate(out.0 as usize);
                         matched.for_each(|id| self.reg.push(id));
                         self.run(egraph, remaining_instructions, new_ffn, subst, yield_fn)
@@ -136,7 +137,7 @@ impl Machine {
                                         // Should already be canonical
                                         let cano_enode = node.clone().map_children(look);
                                         let d = N::get_ffn( data, &cano_enode); 
-                                        new_ffn = std::cmp::max(d,new_ffn);
+                                        new_ffn = T::merge(d,new_ffn);
                                         // TODO update new_ffn
                                         self.lookup.push(id)
                                     },
@@ -320,7 +321,7 @@ impl<L: Language> Compiler<L> {
         self.next_reg = next_out;
     }
 
-    fn extract(self) -> Program<L> {
+    fn extract<T: FfnLattice>(self) -> Program<L,T> {
         let mut subst = Subst::default();
         for (v, r) in self.v2r {
             subst.insert(v, Id::from(r.0 as usize));
@@ -332,7 +333,7 @@ impl<L: Language> Compiler<L> {
     }
 }
 
-impl<L: Language> Program<L> {
+impl<L: Language, T: FfnLattice> Program<L,T> {
     pub(crate) fn compile_from_pat(pattern: &PatternAst<L>) -> Self {
         let mut compiler = Compiler::new();
         compiler.compile(None, pattern);
@@ -349,9 +350,9 @@ impl<L: Language> Program<L> {
         compiler.extract()
     }
 
-    pub fn run<A>(&self, egraph: &EGraph<L, A>, eclass: Id) -> Vec<Subst>
+    pub fn run<A>(&self, egraph: &EGraph<L, T, A>, eclass: Id) -> Vec<Subst<T>>
     where
-        A: Analysis<L>,
+        A: Analysis<L, T>,
     {
         let mut machine = Machine::default();
 
@@ -363,7 +364,7 @@ impl<L: Language> Program<L> {
         machine.run(
             egraph,
             &self.instructions,
-            0,
+            T::default(),
             &self.subst,
             &mut |machine, subst, ffn| {
                 let subst_vec = subst

@@ -81,10 +81,10 @@ You must call [`EGraph::rebuild`] after deserializing an e-graph!
 **/
 #[derive(Clone)]
 #[cfg_attr(feature = "serde-1", derive(Serialize, Deserialize))]
-pub struct EGraph<L: Language, N: Analysis<L>> {
+pub struct EGraph<L: Language, T: FfnLattice, N: Analysis<L, T>> {
     /// The `Analysis` given when creating this `EGraph`.
     pub analysis: N,
-    pub max_ffn: i32,
+    pub max_ffn: T,
     /// The `Explain` used to explain equivalences in this `EGraph`.
     pub(crate) explain: Option<Explain<L>>,
     unionfind: UnionFind,
@@ -124,14 +124,14 @@ fn default_classes_by_op<K>() -> HashMap<K, HashSet<Id>> {
     HashMap::default()
 }
 
-impl<L: Language, N: Analysis<L> + Default> Default for EGraph<L, N> {
+impl<L: Language, T: FfnLattice, N: Analysis<L, T> + Default> Default for EGraph<L, T, N> {
     fn default() -> Self {
         Self::new(N::default())
     }
 }
 
 // manual debug impl to avoid L: Language bound on EGraph defn
-impl<L: Language, N: Analysis<L>> Debug for EGraph<L, N> {
+impl<L: Language, T: FfnLattice, N: Analysis<L,T>> Debug for EGraph<L, T, N> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("EGraph")
             .field("memo", &self.memo)
@@ -140,13 +140,14 @@ impl<L: Language, N: Analysis<L>> Debug for EGraph<L, N> {
     }
 }
 
-impl<L: Language, N: Analysis<L>> EGraph<L, N> {
+impl<L: Language, T: FfnLattice, N: Analysis<L,T>> EGraph<L, T, N> {
     /// Creates a new, empty `EGraph` with the given `Analysis`
     pub fn new(analysis: N) -> Self {
         info!("Initialization ffn {:?}", env::var("EGG_FFN").unwrap_or("4".to_string()));
+        let t : Result<T,_>=  env::var("EGG_FFN").unwrap_or("4".to_string()).parse();
         Self {
             analysis,
-            max_ffn: env::var("EGG_FFN").unwrap_or("4".to_string()).parse().unwrap(),
+            max_ffn: t.unwrap_or(T::default()),
             classes: Default::default(),
             unionfind: Default::default(),
             clean: false,
@@ -253,10 +254,10 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
         // let left = self.lookup_expr(left).expect("left expr not found, use add_expr before calling explain_equivalence");
         // let right = self.lookup_expr(right).expect("right expr not found, use add_expr before calling explain_equivalence");
         // TODO this should not require an ffn value!
-        let left = self.add_expr_internal(left, 0);
+        let left = self.add_expr_internal(left, T::default());
         // let left = self.add_expr_internal(left, ffn_zero());
         // let right = self.add_expr_internal(right, ffn_zero());
-        let right = self.add_expr_internal(right, 0);
+        let right = self.add_expr_internal(right, T::default());
         if let Some(explain) = &mut self.explain {
             explain.explain_equivalence(left, right)
         } else {
@@ -285,7 +286,7 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
     pub fn explain_existance_pattern(
         &mut self,
         _pattern: &PatternAst<L>,
-        _subst: &Subst,
+        _subst: &Subst<T>,
     ) -> Explanation<L> {
         panic!("This query is disabled at the moment because we don't want to alter farfetchedness levels");
         /*
@@ -303,7 +304,7 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
         &mut self,
         _left: &RecExpr<L>,
         _right: &PatternAst<L>,
-        _subst: &Subst,
+        _subst: &Subst<T>,
     ) -> Explanation<L> {
         panic!("This query is disabled at the moment because we don't want to alter farfetchedness levels");
         /*
@@ -346,7 +347,7 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
 
     /// Creates a [`Dot`] to visualize this egraph. See [`Dot`].
     ///
-    pub fn dot(&self) -> Dot<L, N> {
+    pub fn dot(&self) -> Dot<L, T, N> {
         Dot {
             egraph: self,
             config: vec![],
@@ -356,7 +357,7 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
 }
 
 /// Given an `Id` using the `egraph[id]` syntax, retrieve the e-class.
-impl<L: Language, N: Analysis<L>> std::ops::Index<Id> for EGraph<L, N> {
+impl<L: Language, T: FfnLattice, N: Analysis<L,T>> std::ops::Index<Id> for EGraph<L, T, N> {
     type Output = EClass<L, N::Data>;
     fn index(&self, id: Id) -> &Self::Output {
         let id = self.find(id);
@@ -368,7 +369,7 @@ impl<L: Language, N: Analysis<L>> std::ops::Index<Id> for EGraph<L, N> {
 
 /// Given an `Id` using the `&mut egraph[id]` syntax, retrieve a mutable
 /// reference to the e-class.
-impl<L: Language, N: Analysis<L>> std::ops::IndexMut<Id> for EGraph<L, N> {
+impl<L: Language, T: FfnLattice, N: Analysis<L,T>> std::ops::IndexMut<Id> for EGraph<L, T, N> {
     fn index_mut(&mut self, id: Id) -> &mut Self::Output {
         let id = self.find_mut(id);
         self.classes
@@ -377,7 +378,7 @@ impl<L: Language, N: Analysis<L>> std::ops::IndexMut<Id> for EGraph<L, N> {
     }
 }
 
-impl<L: Language, N: Analysis<L>> EGraph<L, N> {
+impl<L: Language, T : FfnLattice, N: Analysis<L,T>> EGraph<L, T, N> {
     /// Adds a [`RecExpr`] to the [`EGraph`], returning the id of the RecExpr's eclass.
     ///
     /// # Example
@@ -392,7 +393,7 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
     /// ```
     ///
     /// [`add_expr`]: EGraph::add_expr()
-    pub fn add_expr(&mut self, expr: &RecExpr<L>, ffn: i32) -> Id {
+    pub fn add_expr(&mut self, expr: &RecExpr<L>, ffn: T) -> Id {
         let id = self.add_expr_internal(expr, ffn);
         self.find(id)
     }
@@ -407,7 +408,7 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
 
     /// Adds an expr to the egraph, and returns the uncanonicalized id of the top enode.
     // fn add_expr_internal(&mut self, expr: &RecExpr<L>, ffn: Ffn) -> Id {
-    fn add_expr_internal(&mut self, expr: &RecExpr<L>, ffn:i32) -> Id {
+    fn add_expr_internal(&mut self, expr: &RecExpr<L>, ffn:T) -> Id {
         let nodes = expr.as_ref();
         let mut new_ids = Vec::with_capacity(nodes.len());
         let mut new_node_q = Vec::with_capacity(nodes.len());
@@ -435,12 +436,12 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
 
     /// Adds a [`Pattern`] and a substitution to the [`EGraph`], returning
     /// the eclass of the instantiated pattern.
-    pub fn add_instantiation(&mut self, pat: &PatternAst<L>, subst: &Subst) -> Id {
+    pub fn add_instantiation(&mut self, pat: &PatternAst<L>, subst: &Subst<T>) -> Id {
         let id = self.add_instantiation_internal(pat, subst);
         self.find(id)
     }
 
-    fn add_instantiation_internal(&mut self, pat: &PatternAst<L>, subst: &Subst) -> Id {
+    fn add_instantiation_internal(&mut self, pat: &PatternAst<L>, subst: &Subst<T>) -> Id {
         let nodes = pat.as_ref();
         let mut new_ids = Vec::with_capacity(nodes.len());
         let mut new_node_q = Vec::with_capacity(nodes.len());
@@ -551,18 +552,18 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
     ///
     /// [`add`]: EGraph::add()
     pub fn add(&mut self, enode: L) -> Id {
-        self.add_with_farfetchedness(enode,0)
+        self.add_with_farfetchedness(enode,T::default())
     }
 
     #[allow(missing_docs)]
-    pub fn add_with_farfetchedness(&mut self, enode: L, ffn: i32) -> Id {
+    pub fn add_with_farfetchedness(&mut self, enode: L, ffn: T) -> Id {
         let id = self.add_internal(enode, ffn);
         self.find(id)
     }
 
     /// Adds an enode to the egraph and also returns the the enode's id (uncanonicalized).
     // fn add_internal(&mut self, enode: L, ffn: Ffn) -> Id {
-    fn add_internal(&mut self, enode: L, ffn: i32) -> Id {
+    fn add_internal(&mut self, enode: L, ffn: T) -> Id {
         let id = self.add_internal_without_ffn(enode,ffn);
         // if let Some(ffn_ptr) = self.farfetchedness.get_mut(&id) {
         //     *ffn_ptr = ffn_min(ffn, *ffn_ptr);
@@ -574,7 +575,7 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
     }
 
     /// Adds an enode to the egraph and also returns the the enode's id (uncanonicalized).
-    fn add_internal_without_ffn(&mut self, mut enode: L, ffn: i32) -> Id {
+    fn add_internal_without_ffn(&mut self, mut enode: L, ffn: T) -> Id {
         let original = enode.clone();
         if let Some(existing_id) = self.lookup_internal(&mut enode) {
             let id = self.find(existing_id);
@@ -606,7 +607,7 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
     }
 
     /// This function makes a new eclass in the egraph (but doesn't touch explanations)
-    fn make_new_eclass(&mut self, enode: L, ffn:i32) -> Id {
+    fn make_new_eclass(&mut self, enode: L, ffn: T) -> Id {
         let id = self.unionfind.make_set();
         log::trace!("  ...adding to {}", id);
         let class = EClass {
@@ -670,7 +671,7 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
         &mut self,
         from_pat: &PatternAst<L>,
         to_pat: &PatternAst<L>,
-        subst: &Subst,
+        subst: &Subst<T>,
         rule_name: impl Into<Symbol>,
     ) -> (Id, bool) {
         let id1 = self.add_instantiation_internal(from_pat, subst); // TODO why is this not just a lookup?
@@ -804,11 +805,11 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
     }
 }
 
-impl<L: Language + Display, N: Analysis<L>> EGraph<L, N> {
+impl<L: Language + Display, T: FfnLattice, N: Analysis<L,T>> EGraph<L, T, N> {
     /// Panic if the given eclass doesn't contain the given patterns
     ///
     /// Useful for testing.
-    pub fn check_goals(&self, id: Id, goals: &[Pattern<L>]) {
+    pub fn check_goals(&self, id: Id, goals: &[Pattern<L,T>]) {
         let (cost, best) = Extractor::new(self, AstSize, [].to_vec()).find_best(id);
         println!("End ({}): {}", cost, best.pretty(80));
 
@@ -832,7 +833,7 @@ impl<L: Language + Display, N: Analysis<L>> EGraph<L, N> {
 }
 
 // All the rebuilding stuff
-impl<L: Language, N: Analysis<L>> EGraph<L, N> {
+impl<L: Language, T: FfnLattice, N: Analysis<L,T>> EGraph<L, T, N> {
     #[inline(never)]
     fn rebuild_classes(&mut self) -> usize {
         let mut classes_by_op = std::mem::take(&mut self.classes_by_op);
@@ -942,7 +943,7 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
                 // This is upward closure, the parent enodes have been updated, so we need to update the class analysis
                 // The ffn to pick is the one that was 
                 let class_id = self.find_mut(class_id);
-                let ffn = 1000; // We should never keep this newly created ffn, the analysis will be normalized by merge
+                let ffn = panic!("TODO"); // We should never keep this newly created ffn, the analysis will be normalized by merge
                 let node_data = N::make(self, &node, ffn);
                 let class = self.classes.get_mut(&class_id).unwrap();
 
@@ -1033,7 +1034,7 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
     }
 
     #[allow(dead_code)]
-    pub(crate) fn check_each_explain(&self, rules: &[&Rewrite<L, N>]) -> bool {
+    pub(crate) fn check_each_explain(&self, rules: &[&Rewrite<L, T, N>]) -> bool {
         if let Some(explain) = &self.explain {
             explain.check_each_explain(rules)
         } else {
@@ -1042,9 +1043,9 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
     }
 }
 
-struct EGraphDump<'a, L: Language, N: Analysis<L>>(&'a EGraph<L, N>);
+struct EGraphDump<'a, L: Language, T: FfnLattice, N: Analysis<L,T>>(&'a EGraph<L, T, N>);
 
-impl<'a, L: Language, N: Analysis<L>> Debug for EGraphDump<'a, L, N> {
+impl<'a, L: Language, T: FfnLattice, N: Analysis<L,T>> Debug for EGraphDump<'a, L, T, N> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut ids: Vec<Id> = self.0.classes().map(|c| c.id).collect();
         ids.sort();

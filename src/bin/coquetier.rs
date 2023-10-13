@@ -51,7 +51,7 @@ impl Rule {
         !self.sideconditions.is_empty() || !self.triggers.is_empty()
     }
 
-    pub fn to_rewrite(&self) -> Rewrite<SymbolLang, HashMap<SymbolLang, i32, fxhash::FxBuildHasher>> {
+    pub fn to_rewrite(&self) -> Rewrite<SymbolLang, i32, HashMap<SymbolLang, i32, fxhash::FxBuildHasher>> {
         // if e is (= A B), returns [(name, A); (name, B)]
         // else returns [(name, e)]
         fn multipattern_part(name: &str, e: &Sexp) -> Vec<(Var, PatternAst<SymbolLang>)> {
@@ -63,7 +63,7 @@ impl Rule {
             }
         }
 
-        let applier: Pattern<SymbolLang> = self.conclusion_rhs.to_string().parse().unwrap();
+        let applier: Pattern<SymbolLang, i32> = self.conclusion_rhs.to_string().parse().unwrap();
         if self.needs_multipattern() {
             let mut patterns: Vec<(Var, PatternAst<SymbolLang>)> = Vec::new();
             for (i, p) in self.sideconditions.iter().enumerate() {
@@ -73,11 +73,11 @@ impl Rule {
                 patterns.extend(multipattern_part(&format!("?$pat{}", i), p))
             }
             patterns.extend(multipattern_part("?$lhs", &self.conclusion_lhs));
-            let searcher: MultiPattern<SymbolLang> = MultiPattern::new(patterns);
+            let searcher: MultiPattern<SymbolLang,i32> = MultiPattern::new(patterns);
             // println!("{}: {} => {}", self.rulename, searcher, applier);
             Rewrite::new(self.rulename.clone(), searcher, applier).unwrap()
         } else {
-            let searcher: Pattern<SymbolLang> = self.conclusion_lhs.to_string().parse::<Pattern<SymbolLang>>().unwrap();
+            let searcher: Pattern<SymbolLang, i32> = self.conclusion_lhs.to_string().parse::<Pattern<SymbolLang,i32>>().unwrap();
             // println!("{}: {} => {}", self.rulename, searcher, applier);
             Rewrite::new(self.rulename.clone(), searcher, applier).unwrap()
         }
@@ -89,7 +89,7 @@ struct Server {
     infile : String,
     outfile : String,
     rules: Vec<Rule>,
-    runner: Runner<SymbolLang, HashMap<SymbolLang, i32, fxhash::FxBuildHasher>>, // TODO Analysis: 
+    runner: Runner<SymbolLang, i32, HashMap<SymbolLang, i32, fxhash::FxBuildHasher>>, // TODO Analysis: 
     //  ,
     cost: HashMap<String, f64,  fxhash::FxBuildHasher>,
     require_terms : Vec<RecExpr<SymbolLang>> 
@@ -156,7 +156,11 @@ impl Server {
 
     fn process_require(&mut self, l: Vec<Sexp>) -> () {
         match &l[1] {
-            res => { self.require_terms.push(res.to_string().parse().unwrap()); }
+            res => { 
+                let expr : RecExpr<SymbolLang> = res.to_string().parse().unwrap();
+                self.runner.add_expr(&expr);
+                self.require_terms.push(expr); 
+            }
         }
     }
 
@@ -262,10 +266,10 @@ impl Server {
     }
 
     fn process_search(&mut self, l: Vec<Sexp>) -> () {
-        let expr: Pattern<SymbolLang> = l[1].to_string().parse().unwrap();
+        let expr: Pattern<SymbolLang, i32> = l[1].to_string().parse().unwrap();
         // let ffn_limit: Ffn = l[2].i().unwrap().try_into().unwrap();
         // self.runner.ffn_limit = ffn_limit;
-        let rewrites: Vec<Rewrite<SymbolLang, HashMap<SymbolLang, i32, fxhash::FxBuildHasher>>> = self.rules.iter().map(|r| r.to_rewrite()).collect();
+        let rewrites: Vec<Rewrite<SymbolLang, i32, HashMap<SymbolLang, i32, fxhash::FxBuildHasher>>> = self.rules.iter().map(|r| r.to_rewrite()).collect();
         let t = Instant::now();
         self.runner.run_nonchained(rewrites.iter());
         let saturation_time = t.elapsed().as_secs_f64();
@@ -331,7 +335,7 @@ impl Server {
         self.runner.add_expr(&expr6);
         self.runner.add_expr(&expr);
 
-        let rewrites: Vec<Rewrite<SymbolLang, HashMap<SymbolLang, i32, fxhash::FxBuildHasher>>> = self.rules.iter().map(|r| r.to_rewrite()).collect();
+        let rewrites: Vec<Rewrite<SymbolLang, i32, HashMap<SymbolLang, i32, fxhash::FxBuildHasher>>> = self.rules.iter().map(|r| r.to_rewrite()).collect();
         let t = Instant::now();
         self.runner.run_nonchained(rewrites.iter());
         let saturation_time = t.elapsed().as_secs_f64();
@@ -384,8 +388,8 @@ impl Server {
                 
                 // println!("Absurd found the following contradiction: {} {}", exprt1, exprt2);
                 let explanations = self.runner.explain_equivalence(&exprt1, &exprt2).get_flat_sexps();
-                // let expl_time = t.elapsed().as_secs_f64();
-                // println!("Absurd found Explanation length: {} (took {:.3}s to generate)", explanations.len(), expl_time);
+                let expl_time = t.elapsed().as_secs_f64();
+                info!("Absurd found Explanation length: {} (took {:.3}s to generate)", explanations.len(), expl_time);
 
                 let path = &self.outfile; 
                 let f = File::create(path).expect("unable to create file");
@@ -461,8 +465,8 @@ fn main() {
     let mut server = Server::new(infile.to_string(), outfile.to_string());
     let use_stdin = false;
     match env::var("EGG_VERBOSE")  {
-        Ok(v) => server.verbose=true,
-        Err(e) => {}
+        Ok(_v) => server.verbose=true,
+        Err(_e) => {}
     }
 
     if use_stdin {

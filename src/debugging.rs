@@ -4,8 +4,8 @@ use std::fs::File;
 use std::io::{BufWriter, Write};
 
 #[allow(unused_must_use)]
-pub fn print_eclasses_to_writer<W: Write, L: Language + std::fmt::Display, N: Analysis<L>>(
-    eg: &EGraph<L, N>,
+pub fn print_eclasses_to_writer<W: Write, L: Language + std::fmt::Display, T: FfnLattice, N: Analysis<L,T>>(
+    eg: &EGraph<L, T, N>,
     w: &mut W
 ) -> () {
     let extractor = Extractor::new(eg, AstSize, [].to_vec());
@@ -39,18 +39,18 @@ pub fn print_eclasses_to_writer<W: Write, L: Language + std::fmt::Display, N: An
     w.flush().expect("error flushing");
 }
 
-pub fn print_eclasses_to_file<L: Language + std::fmt::Display, N: Analysis<L>>(eg: &EGraph<L, N>, path: &str) -> () {
+pub fn print_eclasses_to_file<L: Language + std::fmt::Display, T : FfnLattice, N: Analysis<L,T>>(eg: &EGraph<L, T, N>, path: &str) -> () {
     let f = File::create(path).expect("unable to create file");
     let mut writer = BufWriter::new(f);
     print_eclasses_to_writer(eg, &mut writer);
 }
 
 
-pub fn print_eclasses<L: Language + std::fmt::Display, N: Analysis<L>>(eg: &EGraph<L, N>) -> () {
+pub fn print_eclasses<L: Language + std::fmt::Display, T: FfnLattice, N: Analysis<L,T>>(eg: &EGraph<L, T, N>) -> () {
     print_eclasses_to_writer(eg, &mut std::io::stdout());
 }
 
-pub fn why_exists<L: Language + language::FromOp + std::fmt::Display>(runner: &mut Runner<L, ()>, s: &str) -> () {
+pub fn why_exists<L: Language + language::FromOp + std::fmt::Display>(runner: &mut Runner<L, i32, ()>, s: &str) -> () {
     println!("Explanation of why {s} exists:");
     let e: RecExpr<L> = s.parse::<RecExpr<L>>().unwrap();
     if runner.egraph.lookup_expr(&e).is_none() {
@@ -65,7 +65,7 @@ pub fn why_exists<L: Language + language::FromOp + std::fmt::Display>(runner: &m
 }
 
 #[allow(dead_code)]
-pub fn why_exists_uselessly_iterative(runner: &mut Runner<CoqSimpleLanguage, ()>, s: &str) -> () {
+pub fn why_exists_uselessly_iterative(runner: &mut Runner<CoqSimpleLanguage, i32, ()>, s: &str) -> () {
     let mut current: RecExpr<CoqSimpleLanguage> = s.parse().unwrap();
     for _i in 1..100 {
         println!("{current}");

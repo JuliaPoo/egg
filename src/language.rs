@@ -6,14 +6,23 @@ use std::{
     fmt::{self, Debug, Display},
 };
 use std::{hash::Hash, str::FromStr};
-
 use log::*;
 use crate::*;
 
 use fmt::Formatter;
 use symbolic_expressions::{Sexp, SexpError};
 use thiserror::Error;
+pub trait FfnLattice: FromStr + Debug + Eq + Clone + Copy + PartialOrd + Default + Send + Sync {
+    fn inc(&self) -> Self;
+    fn merge (a : Self, b:Self) -> Self;
+}
 
+impl FfnLattice for i32 {
+    fn inc(&self) -> Self { return self + 1;}
+    fn merge (a : Self, b:Self) -> Self {
+        return std::cmp::max(a,b);
+    }
+}
 /// Trait that defines a Language whose terms will be in the [`EGraph`].
 ///
 /// Check out the [`define_language!`] macro for an easy way to create
@@ -685,17 +694,18 @@ assert_eq!(runner.egraph.find(runner.roots[0]), runner.egraph.find(just_foo));
 [`math.rs`]: https://github.com/egraphs-good/egg/blob/main/tests/math.rs
 [`prop.rs`]: https://github.com/egraphs-good/egg/blob/main/tests/prop.rs
 */
-pub trait Analysis<L: Language>: Sized + Send + Sync{
+pub trait Analysis<L: Language, T: FfnLattice>: Sized + Send + Sync{
     /// The per-[`EClass`] data for this analysis.
     type Data: Debug + Send + Sync;
 
     /// Return ffn for a data analysis
-    fn get_ffn(_a : &Self::Data, enode: &L) -> i32 { return 0; }
+    fn get_ffn(_a : &Self::Data, enode: &L) -> T;
+    // { return 0; }
 
     /// Makes a new [`Analysis`] for a given enode
     /// [`Analysis`].
     ///
-    fn make(egraph: &EGraph<L, Self>, enode: &L, ffn: i32) -> Self::Data;
+    fn make(egraph: &EGraph<L, T, Self>, enode: &L, ffn: T) -> Self::Data;
 
     /// An optional hook that allows inspection before a [`union`] occurs.
     ///
@@ -706,7 +716,7 @@ pub trait Analysis<L: Language>: Sized + Send + Sync{
     ///
     /// [`union`]: EGraph::union()
     #[allow(unused_variables)]
-    fn pre_union(egraph: &EGraph<L, Self>, id1: Id, id2: Id) {}
+    fn pre_union(egraph: &EGraph<L, T, Self>, id1: Id, id2: Id) {}
 
     /// Defines how to merge two `Data`s when their containing
     /// [`EClass`]es merge.
@@ -739,19 +749,19 @@ pub trait Analysis<L: Language>: Sized + Send + Sync{
     /// This function is called immediately following
     /// `Analysis::merge` when unions are performed.
     #[allow(unused_variables)]
-    fn modify(egraph: &mut EGraph<L, Self>, id: Id) -> bool { return true; }
+    fn modify(egraph: &mut EGraph<L, T, Self>, id: Id) -> bool { return true; }
 }
 
-impl<L: Language> Analysis<L> for () {
+impl<L: Language> Analysis<L, i32> for () {
     type Data = ();
     fn get_ffn(_a : &(), _b: &L) -> i32 { return 0; }
-    fn make(_egraph: &EGraph<L, Self>, _enode: &L, ffn: i32) -> Self::Data {}
+    fn make(_egraph: &EGraph<L, i32, Self>, _enode: &L, ffn: i32) -> Self::Data {}
     fn merge(&mut self, _: &mut Self::Data, _: Self::Data) -> DidMerge {
         DidMerge(false, false)
     }
 }
 
-impl Analysis<SymbolLang> for HashMap<SymbolLang, i32> {
+impl Analysis<SymbolLang, i32> for HashMap<SymbolLang, i32> {
     type Data = HashMap<SymbolLang, i32>;
 
     fn get_ffn(map : &Self::Data, enode: &SymbolLang) -> i32 { 
@@ -759,8 +769,8 @@ impl Analysis<SymbolLang> for HashMap<SymbolLang, i32> {
         info!("Try to search enode: {:?} ffn: {:?}", enode, s);
         return *s.unwrap_or(&0);
         // return 0;
-     }
-    fn make(_egraph: &EGraph<SymbolLang, Self>, enode: &SymbolLang, ffn: i32) -> Self::Data {
+    }
+    fn make(_egraph: &EGraph<SymbolLang, i32, Self>, enode: &SymbolLang, ffn: i32) -> Self::Data {
         // In the egraph we should keep track of the current ffn level? This is not good enough.
         // we should pass another value to build the analysis
         let mut m : Self::Data = Default::default();
@@ -785,7 +795,7 @@ impl Analysis<SymbolLang> for HashMap<SymbolLang, i32> {
     }
 
     // fn pre_union(egraph: &EGraph<L, Self>, id1: Id, id2: Id) {}
-    fn modify(egraph: &mut EGraph<SymbolLang, Self>, id: Id) -> bool { 
+    fn modify(egraph: &mut EGraph<SymbolLang, i32, Self>, id: Id) -> bool { 
         let mut m : Self::Data = Default::default();
         let mut change = false;
         for (key, value) in &egraph[id].data {

@@ -11,7 +11,7 @@ use std::fmt::{self, Debug, Display, Formatter};
 use std::io::{Error, ErrorKind, Result, Write};
 use std::path::Path;
 
-use crate::{egraph::EGraph, Analysis, Language};
+use crate::{egraph::EGraph, Analysis, Language, FfnLattice};
 
 /**
 A wrapper for an [`EGraph`] that can output [GraphViz] for
@@ -50,8 +50,8 @@ instead of to its own eclass.
 
 [GraphViz]: https://graphviz.gitlab.io/
 **/
-pub struct Dot<'a, L: Language, N: Analysis<L>> {
-    pub(crate) egraph: &'a EGraph<L, N>,
+pub struct Dot<'a, L: Language, T: FfnLattice, N: Analysis<L,T>> {
+    pub(crate) egraph: &'a EGraph<L, T, N>,
     /// A list of strings to be output top part of the dot file.
     pub config: Vec<String>,
     /// Whether or not to anchor the edges in the output.
@@ -59,10 +59,11 @@ pub struct Dot<'a, L: Language, N: Analysis<L>> {
     pub use_anchors: bool,
 }
 
-impl<'a, L, N> Dot<'a, L, N>
+impl<'a, L, T, N> Dot<'a, L, T, N>
 where
     L: Language + Display,
-    N: Analysis<L>,
+    T: FfnLattice,
+    N: Analysis<L, T>,
 {
     /// Writes the `Dot` to a .dot file with the given filename.
     /// Does _not_ require a `dot` binary.
@@ -170,16 +171,17 @@ where
     }
 }
 
-impl<'a, L: Language, N: Analysis<L>> Debug for Dot<'a, L, N> {
+impl<'a, L: Language, T: FfnLattice, N: Analysis<L,T>> Debug for Dot<'a, L, T, N> {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         f.debug_tuple("Dot").field(self.egraph).finish()
     }
 }
 
-impl<'a, L, N> Display for Dot<'a, L, N>
+impl<'a, L, T, N> Display for Dot<'a, L, T, N>
 where
     L: Language + Display,
-    N: Analysis<L>,
+    T: FfnLattice,
+    N: Analysis<L,T>,
 {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         writeln!(f, "digraph egraph {{")?;

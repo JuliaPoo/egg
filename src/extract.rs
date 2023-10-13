@@ -4,7 +4,7 @@ use std::fmt::Debug;
 use either::*; 
 
 use crate::util::HashMap;
-use crate::{Analysis, EClass, EGraph, Id, Language, RecExpr};
+use crate::{Analysis, EClass, EGraph, Id, Language, RecExpr, FfnLattice};
 
 /** Extracting a single [`RecExpr`] from an [`EGraph`].
 
@@ -40,10 +40,10 @@ assert_eq!(best, "10".parse().unwrap());
 
 **/
 #[derive(Debug)]
-pub struct Extractor<'a, CF: CostFunction<L>, L: Language, N: Analysis<L>> {
+pub struct Extractor<'a, CF: CostFunction<L>, L: Language, T: FfnLattice, N: Analysis<L, T>> {
     cost_function: CF,
     costs: HashMap<Id, (CF::Cost, Either<L, RecExpr<L>>)>,
-    egraph: &'a EGraph<L, N>,
+    egraph: &'a EGraph<L, T, N>,
 }
 
 /** A cost function that can be used by an [`Extractor`].
@@ -192,11 +192,12 @@ fn cmp<T: PartialOrd>(a: &Option<T>, b: &Option<T>) -> Ordering {
     }
 }
 
-impl<'a, CF, L, N> Extractor<'a, CF, L, N>
+impl<'a, CF, L, T, N> Extractor<'a, CF, L, T, N>
 where
     CF: CostFunction<L>,
     L: Language,
-    N: Analysis<L>,
+    T: FfnLattice,
+    N: Analysis<L,T>,
 {
     /// Create a new `Extractor` given an `EGraph` and a
     /// `CostFunction`.
@@ -204,7 +205,7 @@ where
     /// The extraction does all the work on creation, so this function
     /// performs the greedy search for cheapest representative of each
     /// eclass.
-    pub fn new(egraph: &'a EGraph<L, N>, cost_function: CF, search_for : Vec<(CF::Cost, RecExpr<L>)>) -> Self {
+    pub fn new(egraph: &'a EGraph<L, T, N>, cost_function: CF, search_for : Vec<(CF::Cost, RecExpr<L>)>) -> Self {
         let mut costs = HashMap::default();
         for (c,e ) in search_for {
             match egraph.lookup_expr(&e) {

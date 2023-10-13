@@ -1,6 +1,6 @@
 use crate::Symbol;
 use crate::{
-    util::pretty_print, Analysis, ENodeOrVar, HashMap, HashSet, Id, Language, PatternAst, Rewrite,
+    util::pretty_print, Analysis, ENodeOrVar, HashMap, HashSet, Id, Language, FfnLattice, PatternAst, Rewrite,
     Var,
 };
 use std::fmt::{self, Debug, Display, Formatter};
@@ -281,13 +281,13 @@ impl<L: Language> Explanation<L> {
 
     /// Check the validity of the explanation with respect to the given rules.
     /// This only is able to check rule applications when the rules are implement `get_pattern_ast`.
-    pub fn check_proof<'a, R, N: Analysis<L>>(&mut self, rules: R)
+    pub fn check_proof<'a, R, T: FfnLattice + 'a, N: Analysis<L,T>>(&mut self, rules: R)
     where
-        R: IntoIterator<Item = &'a Rewrite<L, N>>,
+        R: IntoIterator<Item = &'a Rewrite<L, T, N>>,
         L: 'a,
         N: 'a,
     {
-        let rules: Vec<&Rewrite<L, N>> = rules.into_iter().collect();
+        let rules: Vec<&Rewrite<L, T, N>> = rules.into_iter().collect();
         let rule_table = Explain::make_rule_table(rules.as_slice());
         self.make_flat_explanation();
         let flat_explanation = self.flat_explanation.as_ref().unwrap();
@@ -309,11 +309,11 @@ impl<L: Language> Explanation<L> {
         }
     }
 
-    fn check_rewrite_at<N: Analysis<L>>(
+    fn check_rewrite_at<T: FfnLattice, N: Analysis<L,T>>(
         &self,
         current: &FlatTerm<L>,
         next: &FlatTerm<L>,
-        table: &HashMap<Symbol, &Rewrite<L, N>>,
+        table: &HashMap<Symbol, &Rewrite<L, T, N>>,
         is_forward: bool,
     ) -> bool {
         if is_forward && next.forward_rule.is_some() {
@@ -342,10 +342,10 @@ impl<L: Language> Explanation<L> {
     }
 
     // if the rewrite is just patterns, then it can check it
-    fn check_rewrite<'a, N: Analysis<L>>(
+    fn check_rewrite<'a, T: FfnLattice, N: Analysis<L, T>>(
         current: &'a FlatTerm<L>,
         next: &'a FlatTerm<L>,
-        rewrite: &Rewrite<L, N>,
+        rewrite: &Rewrite<L, T, N>,
     ) -> bool {
         if let Some(lhs) = rewrite.searcher.get_pattern_ast() {
             if let Some(rhs) = rewrite.applier.get_pattern_ast() {
@@ -765,17 +765,17 @@ impl<L: Language> Explain<L> {
         FlatTerm::new(node, children)
     }
 
-    fn make_rule_table<'a, N: Analysis<L>>(
-        rules: &[&'a Rewrite<L, N>],
-    ) -> HashMap<Symbol, &'a Rewrite<L, N>> {
-        let mut table: HashMap<Symbol, &'a Rewrite<L, N>> = Default::default();
+    fn make_rule_table<'a, T: FfnLattice, N: Analysis<L, T>>(
+        rules: &[&'a Rewrite<L, T, N>],
+    ) -> HashMap<Symbol, &'a Rewrite<L, T, N>> {
+        let mut table: HashMap<Symbol, &'a Rewrite<L, T, N>> = Default::default();
         for r in rules {
             table.insert(r.name, r);
         }
         table
     }
 
-    pub fn check_each_explain<N: Analysis<L>>(&self, rules: &[&Rewrite<L, N>]) -> bool {
+    pub fn check_each_explain<T: FfnLattice, N: Analysis<L, T>>(&self, rules: &[&Rewrite<L, T, N>]) -> bool {
         let rule_table = Explain::make_rule_table(rules);
         for i in 0..self.explainfind.len() {
             let explain_node = &self.explainfind[i];

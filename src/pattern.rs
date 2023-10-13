@@ -62,10 +62,10 @@ use crate::*;
 ///
 /// [`FromStr`]: std::str::FromStr
 #[derive(Debug, PartialEq, Clone)]
-pub struct Pattern<L> {
+pub struct Pattern<L,T : FfnLattice> {
     /// The actual pattern as a [`RecExpr`]
     pub ast: PatternAst<L>,
-    program: machine::Program<L>,
+    program: machine::Program<L,T>,
 }
 
 /// A [`RecExpr`] that represents a
@@ -100,7 +100,7 @@ impl<L: Language> PatternAst<L> {
     }
 }
 
-impl<L: Language> Pattern<L> {
+impl<L: Language, T : FfnLattice> Pattern<L,T> {
     /// Creates a new pattern from the given pattern ast.
     pub fn new(ast: PatternAst<L>) -> Self {
         let ast = ast.compact();
@@ -122,7 +122,7 @@ impl<L: Language> Pattern<L> {
     }
 }
 
-impl<L: Language + Display> Pattern<L> {
+impl<L: Language + Display, T : FfnLattice> Pattern<L,T> {
     /// Pretty print this pattern as a sexp with the given width
     pub fn pretty(&self, width: usize) -> String {
         self.ast.pretty(width)
@@ -209,7 +209,7 @@ impl<L: FromOp> FromOp for ENodeOrVar<L> {
     }
 }
 
-impl<L: FromOp> std::str::FromStr for Pattern<L> {
+impl<L: FromOp, T : FfnLattice> std::str::FromStr for Pattern<L,T> {
     type Err = RecExprParseError<ENodeOrVarParseError<L::Error>>;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -217,7 +217,7 @@ impl<L: FromOp> std::str::FromStr for Pattern<L> {
     }
 }
 
-impl<'a, L: Language> From<&'a [L]> for Pattern<L> {
+impl<'a, L: Language, T : FfnLattice> From<&'a [L]> for Pattern<L,T> {
     fn from(expr: &'a [L]) -> Self {
         let nodes: Vec<_> = expr.iter().cloned().map(ENodeOrVar::ENode).collect();
         let ast = RecExpr::from(nodes);
@@ -225,15 +225,15 @@ impl<'a, L: Language> From<&'a [L]> for Pattern<L> {
     }
 }
 
-impl<L: Language> From<PatternAst<L>> for Pattern<L> {
+impl<L: Language, T : FfnLattice> From<PatternAst<L>> for Pattern<L,T> {
     fn from(ast: PatternAst<L>) -> Self {
         Self::new(ast)
     }
 }
 
-impl<L: Language> TryFrom<Pattern<L>> for RecExpr<L> {
+impl<L: Language, T : FfnLattice> TryFrom<Pattern<L,T>> for RecExpr<L> {
     type Error = Var;
-    fn try_from(pat: Pattern<L>) -> Result<Self, Self::Error> {
+    fn try_from(pat: Pattern<L,T>) -> Result<Self, Self::Error> {
         let nodes = pat.ast.as_ref().iter().cloned();
         let ns: Result<Vec<_>, _> = nodes
             .map(|n| match n {
@@ -245,7 +245,7 @@ impl<L: Language> TryFrom<Pattern<L>> for RecExpr<L> {
     }
 }
 
-impl<L: Language + Display> Display for Pattern<L> {
+impl<L: Language + Display, T : FfnLattice> Display for Pattern<L,T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         Display::fmt(&self.ast, f)
     }
@@ -259,11 +259,11 @@ impl<L: Language + Display> Display for Pattern<L> {
 /// many matches were found total.
 ///
 #[derive(Debug)]
-pub struct SearchMatches<'a, L: Language> {
+pub struct SearchMatches<'a, L: Language, T : FfnLattice> {
     /// The eclass id that these matches were found in.
     pub eclass: Id,
     /// The substitutions for each match.
-    pub substs: Vec<Subst>,
+    pub substs: Vec<Subst<T>>,
     /// The farfetchedness of the new terms that this each substitution creates.
     /// Must have the same length as substs (or be empty if not computed yet).
     //    pub ffns: Vec<egraph::Ffn>,
@@ -271,13 +271,13 @@ pub struct SearchMatches<'a, L: Language> {
     pub ast: Option<Cow<'a, PatternAst<L>>>,
 }
 
-impl<'a, L: Language> SearchMatches<'a, L> {
+impl<'a, T : FfnLattice, L: Language> SearchMatches<'a, L, T> {
     /// Filter the substs to contain only those that don't create too far-fetched terms,
     /// and record the far-fetchedness of each term in ffns.
-    pub fn compute_and_filter_ffns<N: Analysis<L>>(
+    pub fn compute_and_filter_ffns<N: Analysis<L,T>>(
         &mut self,
-        egraph: &EGraph<L, N>,
-        _searcher: &std::sync::Arc<dyn Searcher<L, N> + Sync + Send>,
+        egraph: &EGraph<L, T, N>,
+        _searcher: &std::sync::Arc<dyn Searcher<L, T, N> + Sync + Send>,
     ) -> () {
         // self.ffns.resize(self.substs.len(), 0); // <-- to disable ffn restrictions
         let all_substs = &mut self.substs.clone();
@@ -299,21 +299,21 @@ impl<'a, L: Language> SearchMatches<'a, L> {
             //         None => {}
             //     }
             // }
-            info!("Comparing ffns: {} <? {}",i.ffn, egraph.max_ffn);
+            info!("Comparing ffns: {:?} <? {:?}",i.ffn, egraph.max_ffn);
             if i.ffn < egraph.max_ffn {
                 // let n = L::num_enode(m+1).unwrap();
                 let n = L::num_enode(0).unwrap();
                 let id_n = egraph.lookup(n).unwrap();
                 // let mut newi = i.clone();
                 i.set_default(id_n);
-                i.set_ffn(i.ffn+1);
+                i.set_ffn(i.ffn.inc());
                 self.substs.push(i.clone());
             }
          }
     }
 }
 
-impl<L: Language, A: Analysis<L>> Searcher<L, A> for Pattern<L> {
+impl<L: Language, T : FfnLattice, A: Analysis<L,T>> Searcher<L, T, A> for Pattern<L,T> {
     fn get_pattern_ast(&self) -> Option<&PatternAst<L>> {
         Some(&self.ast)
     }
@@ -322,7 +322,7 @@ impl<L: Language, A: Analysis<L>> Searcher<L, A> for Pattern<L> {
     //     egraph.max_ffn_of_instantiated_pattern(&self.ast, &subst)
     // }
 
-    fn search(&self, egraph: &EGraph<L, A>) -> Vec<SearchMatches<L>> {
+    fn search(&self, egraph: &EGraph<L, T, A>) -> Vec<SearchMatches<L, T>> {
         match self.ast.as_ref().last().unwrap() {
             ENodeOrVar::ENode(e) => {
                 #[allow(enum_intrinsics_non_enums)]
@@ -342,7 +342,7 @@ impl<L: Language, A: Analysis<L>> Searcher<L, A> for Pattern<L> {
         }
     }
 
-    fn search_eclass(&self, egraph: &EGraph<L, A>, eclass: Id) -> Option<SearchMatches<L>> {
+    fn search_eclass(&self, egraph: &EGraph<L, T, A>, eclass: Id) -> Option<SearchMatches<L, T>> {
         let substs = self.program.run(egraph, eclass);
         if substs.is_empty() {
             None
@@ -361,10 +361,11 @@ impl<L: Language, A: Analysis<L>> Searcher<L, A> for Pattern<L> {
     }
 }
 
-impl<L, A> Applier<L, A> for Pattern<L>
+impl<L, T, A> Applier<L, T, A> for Pattern<L,T>
 where
     L: Language,
-    A: Analysis<L>,
+    T : FfnLattice,
+    A: Analysis<L,T>,
 {
     fn get_pattern_ast(&self) -> Option<&PatternAst<L>> {
         Some(&self.ast)
@@ -372,8 +373,8 @@ where
 
     fn apply_matches(
         &self,
-        egraph: &mut EGraph<L, A>,
-        matches: &[SearchMatches<L>],
+        egraph: &mut EGraph<L, T, A>,
+        matches: &[SearchMatches<L, T>],
         rule_name: Symbol
     ) -> Vec<Id> {
         let mut added = vec![];
@@ -405,9 +406,9 @@ where
 
     fn apply_one(
         &self,
-        egraph: &mut EGraph<L, A>,
+        egraph: &mut EGraph<L, T, A>,
         eclass: Id,
-        subst: &Subst,
+        subst: &Subst<T>,
         searcher_ast: Option<&PatternAst<L>>,
         rule_name: Symbol,
     ) -> Vec<Id> {
@@ -436,11 +437,11 @@ where
 }
 
 // Observation, this is never called?
-pub(crate) fn apply_pat<L: Language, A: Analysis<L>>(
+pub(crate) fn apply_pat<L: Language, T : FfnLattice, A: Analysis<L, T>>(
     ids: &mut [Id],
     pat: &[ENodeOrVar<L>],
-    egraph: &mut EGraph<L, A>,
-    subst: &Subst,
+    egraph: &mut EGraph<L, T, A>,
+    subst: &Subst<T>,
 ) -> Id {
     debug_assert_eq!(pat.len(), ids.len());
     trace!("apply_rec {:2?} {:?}", pat, subst);

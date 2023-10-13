@@ -83,8 +83,8 @@ pub fn symbol_metadata(name : &str) -> Option<(usize,bool)> {
   }
 }
 
-pub fn make_rules() -> Vec<Rewrite<CoqSimpleLanguage, ()>> {
-  let v  : Vec<Rewrite<CoqSimpleLanguage, ()>> = vec![
+pub fn make_rules() -> Vec<Rewrite<CoqSimpleLanguage, i32, ()>> {
+  let v  : Vec<Rewrite<CoqSimpleLanguage, i32,()>> = vec![
     rewrite!("wadd_0_l"; "(&wadd(&ZToWord !0)?a)" => "?a"),
     rewrite!("wadd_0_r"; "(&wadd ?a(&ZToWord !0))" => "?a"),
     rewrite!("wadd_comm"; "(&wadd ?a ?b)" => "(&wadd ?b ?a)"),

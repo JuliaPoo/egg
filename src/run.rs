@@ -136,9 +136,9 @@ println!(
 
 ```
 */
-pub struct Runner<L: Language, N: Analysis<L>, IterData = ()> {
+pub struct Runner<L: Language, T: FfnLattice, N: Analysis<L,T>, IterData = ()> {
     /// The [`EGraph`] used.
-    pub egraph: EGraph<L, N>,
+    pub egraph: EGraph<L, T, N>,
     /// Data accumulated over each [`Iteration`].
     pub iterations: Vec<Iteration<IterData>>,
     /// The roots of expressions added by the
@@ -160,23 +160,25 @@ pub struct Runner<L: Language, N: Analysis<L>, IterData = ()> {
     /// far-fetched-ness limit
 
     start_time: Option<Instant>,
-    scheduler: Box<dyn RewriteScheduler<L, N>>,
+    scheduler: Box<dyn RewriteScheduler<L, T, N>>,
 }
 
-impl<L, N> Default for Runner<L, N, ()>
+impl<L, N, T> Default for Runner<L, T, N, ()>
 where
     L: Language,
-    N: Analysis<L> + Default,
+    T: FfnLattice,
+    N: Analysis<L, T> + Default,
 {
     fn default() -> Self {
         Runner::new(N::default())
     }
 }
 
-impl<L, N, IterData> Debug for Runner<L, N, IterData>
+impl<L, N, T, IterData> Debug for Runner<L, T, N, IterData>
 where
     L: Language,
-    N: Analysis<L>,
+    T: FfnLattice,
+    N: Analysis<L, T>,
     IterData: Debug,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -308,11 +310,12 @@ pub struct Iteration<IterData> {
 
 type RunnerResult<T> = std::result::Result<T, StopReason>;
 
-impl<L, N, IterData> Runner<L, N, IterData>
+impl<L, N, T, IterData> Runner<L, T, N, IterData>
 where
     L: Language,
-    N: Analysis<L>,
-    IterData: IterationData<L, N>,
+    T: FfnLattice,
+    N: Analysis<L,T>,
+    IterData: IterationData<L, T, N>,
 {
     /// Create a new `Runner` with the given analysis and default parameters.
     pub fn new(analysis: N) -> Self {
@@ -388,7 +391,7 @@ where
     /// Change out the [`RewriteScheduler`] used by this [`Runner`].
     /// The default one is [`BackoffScheduler`].
     ///
-    pub fn with_scheduler(self, scheduler: impl RewriteScheduler<L, N> + 'static) -> Self {
+    pub fn with_scheduler(self, scheduler: impl RewriteScheduler<L, T, N> + 'static) -> Self {
         let scheduler = Box::new(scheduler);
         Self { scheduler, ..self }
     }
@@ -405,7 +408,7 @@ where
 
     /// Like with_expr, but does not consume & return self
     pub fn add_expr(&mut self, expr: &RecExpr<L>) -> () {
-        let id = self.egraph.add_expr(expr, 0); // FFN This one should be ok
+        let id = self.egraph.add_expr(expr, T::default()); // FFN This one should be ok
         self.roots.push(id);
     }
 
@@ -416,7 +419,7 @@ where
     /// insertion order.
     pub fn with_exprs(mut self, exprs: Vec<&RecExpr<L>>) -> Self {
         for expr in exprs {
-            let id = self.egraph.add_expr(expr, 0);
+            let id = self.egraph.add_expr(expr, T::default());
             self.roots.push(id);
         }
         self
@@ -424,7 +427,7 @@ where
 
 
     /// Replace the [`EGraph`] of this `Runner`.
-    pub fn with_egraph(self, egraph: EGraph<L, N>) -> Self {
+    pub fn with_egraph(self, egraph: EGraph<L, T, N>) -> Self {
         Self { egraph, ..self }
     }
 
@@ -434,7 +437,8 @@ where
     /// set.
     pub fn run<'a, R>(mut self, rules: R) -> Self
     where
-        R: IntoIterator<Item = &'a Rewrite<L, N>>,
+        R: IntoIterator<Item = &'a Rewrite<L, T, N>>,
+        T: 'a,
         L: 'a,
         N: 'a,
     {
@@ -445,12 +449,13 @@ where
     /// Like `run`, but does not consume & return self
     pub fn run_nonchained<'a, R>(&mut self, rules: R) -> ()
     where
-        R: IntoIterator<Item = &'a Rewrite<L, N>>,
+        R: IntoIterator<Item = &'a Rewrite<L, T, N>>,
+        T: 'a,
         L: 'a,
         N: 'a,
     {
         // Split the rules for annotations and the rest
-        let rules_pre: Vec<&Rewrite<L, N>> = rules.into_iter().collect();
+        let rules_pre: Vec<&Rewrite<L, T, N>> = rules.into_iter().collect();
         let rules = rules_pre[0..].to_vec();
         // let rules_annot: Vec<&Rewrite<L, N>> = rules_pre[0..1].to_vec();
         check_rules(&rules);
@@ -524,7 +529,7 @@ where
     pub fn explain_existance_pattern(
         &mut self,
         pattern: &PatternAst<L>,
-        subst: &Subst,
+        subst: &Subst<T>,
     ) -> Explanation<L> {
         self.egraph.explain_existance_pattern(pattern, subst)
     }
@@ -534,7 +539,7 @@ where
         &mut self,
         left: &RecExpr<L>,
         right: &PatternAst<L>,
-        subst: &Subst,
+        subst: &Subst<T>,
     ) -> Explanation<L> {
         self.egraph.explain_matches(left, right, subst)
     }
@@ -560,7 +565,7 @@ where
         }
     }
 
-    fn run_one(&mut self, rules: &[&Rewrite<L, N>]) -> Iteration<IterData> {
+    fn run_one(&mut self, rules: &[&Rewrite<L, T, N>]) -> Iteration<IterData> {
         assert!(self.stop_reason.is_none());
 
         info!("\nIteration {}", self.iterations.len());
@@ -589,7 +594,7 @@ where
 
         let start_time = Instant::now();
 
-        let mut matches : Vec<Vec<SearchMatches<L>>>= Vec::new();
+        let mut matches : Vec<Vec<SearchMatches<L,T>>>= Vec::new();
 
         // result = result.and_then(|_| {
         //     rules.iter().try_for_each(|rule| {
@@ -725,7 +730,7 @@ where
     }
 }
 
-fn check_rules<L, N>(rules: &[&Rewrite<L, N>]) {
+fn check_rules<L, T, N>(rules: &[&Rewrite<L, T, N>]) {
     let mut name_counts = IndexMap::default();
     for rw in rules {
         *name_counts.entry(rw.name).or_default() += 1
@@ -751,10 +756,11 @@ the [`EGraph`] and dominating how much time is spent while running the
 
 */
 #[allow(unused_variables)]
-pub trait RewriteScheduler<L, N>
+pub trait RewriteScheduler<L, T, N>
 where
     L: Language,
-    N: Analysis<L>,
+    T: FfnLattice,
+    N: Analysis<L, T>,
 {
     /// Whether or not the [`Runner`] is allowed
     /// to say it has saturated.
@@ -773,9 +779,9 @@ where
     fn search_rewrite<'a>(
         &mut self,
         iteration: usize,
-        egraph: &EGraph<L, N>,
-        rewrite: &'a Rewrite<L, N>,
-    ) -> Vec<SearchMatches<'a, L>> {
+        egraph: &EGraph<L, T, N>,
+        rewrite: &'a Rewrite<L, T, N>,
+    ) -> Vec<SearchMatches<'a, L, T>> {
         rewrite.search(egraph)
     }
 
@@ -788,9 +794,9 @@ where
     fn apply_rewrite(
         &mut self,
         iteration: usize,
-        egraph: &mut EGraph<L, N>,
-        rewrite: &Rewrite<L, N>,
-        matches: Vec<SearchMatches<L>>,
+        egraph: &mut EGraph<L, T, N>,
+        rewrite: &Rewrite<L, T, N>,
+        matches: Vec<SearchMatches<L, T>>,
     ) -> usize {
         rewrite.apply(egraph, &matches).len()
     }
@@ -810,10 +816,11 @@ where
 #[derive(Debug)]
 pub struct SimpleScheduler;
 
-impl<L, N> RewriteScheduler<L, N> for SimpleScheduler
+impl<L, T, N> RewriteScheduler<L, T, N> for SimpleScheduler
 where
     L: Language,
-    N: Analysis<L>,
+    T: FfnLattice,
+    N: Analysis<L,T>,
 {
 }
 
@@ -903,10 +910,11 @@ impl Default for BackoffScheduler {
     }
 }
 
-impl<L, N> RewriteScheduler<L, N> for BackoffScheduler
+impl<L, T, N> RewriteScheduler<L, T, N> for BackoffScheduler
 where
     L: Language,
-    N: Analysis<L>,
+    T: FfnLattice,
+    N: Analysis<L,T>,
 {
     fn can_stop(&mut self, iteration: usize) -> bool {
         let n_stats = self.stats.len();
@@ -953,9 +961,9 @@ where
     fn search_rewrite<'a>(
         &mut self,
         iteration: usize,
-        egraph: &EGraph<L, N>,
-        rewrite: &'a Rewrite<L, N>,
-    ) -> Vec<SearchMatches<'a, L>> {
+        egraph: &EGraph<L, T, N>,
+        rewrite: &'a Rewrite<L, T, N>,
+    ) -> Vec<SearchMatches<'a, L, T>> {
         let stats = self.rule_stats(rewrite.name);
 
         if iteration < stats.banned_until {
@@ -1000,20 +1008,22 @@ where
 /// [`Runner`] is generic over the [`IterationData`] that it will be in the
 /// [`Iteration`]s, but by default it uses `()`.
 ///
-pub trait IterationData<L, N>: Sized
+pub trait IterationData<L, T, N>: Sized
 where
     L: Language,
-    N: Analysis<L>,
+    T: FfnLattice,
+    N: Analysis<L, T>,
 {
     /// Given the current [`Runner`], make the
     /// data to be put in this [`Iteration`].
-    fn make(runner: &Runner<L, N, Self>) -> Self;
+    fn make(runner: &Runner<L, T, N, Self>) -> Self;
 }
 
-impl<L, N> IterationData<L, N> for ()
+impl<L, T, N> IterationData<L, T, N> for ()
 where
     L: Language,
-    N: Analysis<L>,
+    T: FfnLattice,
+    N: Analysis<L,T>,
 {
-    fn make(_: &Runner<L, N, Self>) -> Self {}
+    fn make(_: &Runner<L, T, N, Self>) -> Self {}
 }

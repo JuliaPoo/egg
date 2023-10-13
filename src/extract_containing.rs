@@ -15,7 +15,7 @@ pub struct ExtractorContaining<'a, CF: CostFunction<L>, L: Language, N: Analysis
 }
 
 
-fn cmp<T: PartialOrd>(a: &Option<T>, b: &Option<T>) -> Ordering {
+fn cmp<T: FfnLattice>(a: &Option<T>, b: &Option<T>) -> Ordering {
     // None is high
     match (a, b) {
         (None, None) => Ordering::Equal,

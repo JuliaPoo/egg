@@ -25,12 +25,12 @@ use crate::*;
 ///
 /// Multipatterns currently do not support the explanations feature.
 #[derive(Debug, PartialEq, Clone)]
-pub struct MultiPattern<L> {
+pub struct MultiPattern<L,T: FfnLattice> {
     asts: Vec<(Var, PatternAst<L>)>,
-    program: machine::Program<L>,
+    program: machine::Program<L,T>,
 }
 
-impl<L: Language> MultiPattern<L> {
+impl<L: Language, T: FfnLattice> MultiPattern<L,T> {
     /// Creates a new multipattern, binding the given patterns to the corresponding variables.
     ///
     /// ```
@@ -74,7 +74,7 @@ pub enum MultiPatternParseError<E> {
     VariableError(<Var as FromStr>::Err),
 }
 
-impl<L: Language + FromOp> FromStr for MultiPattern<L> {
+impl<L: Language + FromOp, T: FfnLattice> FromStr for MultiPattern<L,T> {
     type Err = MultiPatternParseError<<PatternAst<L> as FromStr>::Err>;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -103,7 +103,7 @@ impl<L: Language + FromOp> FromStr for MultiPattern<L> {
     }
 }
 
-impl<L: Language + Display> Display for MultiPattern<L> {
+impl<L: Language + Display, T: FfnLattice> Display for MultiPattern<L,T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         fn fmt_one<L: Language + Display>(f: &mut Formatter<'_>, t: &(Var, PatternAst<L>)) -> fmt::Result {
             write!(f, "{} = {}", t.0, t.1)
@@ -123,7 +123,7 @@ impl<L: Language + Display> Display for MultiPattern<L> {
     }
 }
 
-impl<L: Language, A: Analysis<L>> Searcher<L, A> for MultiPattern<L> {
+impl<L: Language, T: FfnLattice, A: Analysis<L, T>> Searcher<L, T, A> for MultiPattern<L,T> {
 
     fn get_pattern_ast(&self) -> Option<&PatternAst<L>> {
         let (_var,ast_aux) = &self.asts.last().unwrap();
@@ -138,7 +138,7 @@ impl<L: Language, A: Analysis<L>> Searcher<L, A> for MultiPattern<L> {
     //     current_max
     // }
 
-    fn search_eclass(&self, egraph: &EGraph<L, A>, eclass: Id) -> Option<SearchMatches<L>> {
+    fn search_eclass(&self, egraph: &EGraph<L, T, A>, eclass: Id) -> Option<SearchMatches<L,T>> {
         let substs = self.program.run(egraph, eclass);
         // We need to update the default value for all the substitution variables
         
@@ -172,12 +172,12 @@ impl<L: Language, A: Analysis<L>> Searcher<L, A> for MultiPattern<L> {
     }
 }
 
-impl<L: Language, A: Analysis<L>> Applier<L, A> for MultiPattern<L> {
+impl<L: Language, T : FfnLattice, A: Analysis<L,T>> Applier<L, T, A> for MultiPattern<L,T> {
     fn apply_one(
         &self,
-        _egraph: &mut EGraph<L, A>,
+        _egraph: &mut EGraph<L, T, A>,
         _eclass: Id,
-        _subst: &Subst,
+        _subst: &Subst<T>,
         _searcher_ast: Option<&PatternAst<L>>,
         _rule_name: Symbol,
     ) -> Vec<Id> {
@@ -186,8 +186,8 @@ impl<L: Language, A: Analysis<L>> Applier<L, A> for MultiPattern<L> {
 
     fn apply_matches(
         &self,
-        egraph: &mut EGraph<L, A>,
-        matches: &[SearchMatches<L>],
+        egraph: &mut EGraph<L, T, A>,
+        matches: &[SearchMatches<L, T>],
         _rule_name: Symbol,
     ) -> Vec<Id> {
         // TODO explanations?

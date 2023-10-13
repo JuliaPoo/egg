@@ -346,7 +346,7 @@ macro_rules! coq_rewrite {
 #[macro_export]
 macro_rules! __rewrite {
     (@parse $t:ident $rhs:literal) => {
-        $rhs.parse::<$crate::$t<_>>().unwrap()
+        $rhs.parse::<$crate::$t<_, _>>().unwrap()
     };
     (@parse $t:ident $rhs:expr) => { $rhs };
     (@applier $applier:expr;) => { $applier };

@@ -15,19 +15,20 @@ use crate::*;
 ///
 #[derive(Clone)]
 #[non_exhaustive]
-pub struct Rewrite<L, N> {
+pub struct Rewrite<L, T, N> {
     /// The name of the rewrite.
     pub name: Symbol,
     /// The searcher (left-hand side) of the rewrite.
-    pub searcher: Arc<dyn Searcher<L, N> + Sync + Send>,
+    pub searcher: Arc<dyn Searcher<L, T, N> + Sync + Send>,
     /// The applier (right-hand side) of the rewrite.
-    pub applier: Arc<dyn Applier<L, N> + Sync + Send>,
+    pub applier: Arc<dyn Applier<L, T, N> + Sync + Send>,
 }
 
-impl<L, N> Debug for Rewrite<L, N>
+impl<L, T, N> Debug for Rewrite<L, T, N>
 where
     L: Language + Display + 'static,
-    N: Analysis<L> + 'static,
+    T: FfnLattice,
+    N: Analysis<L,T> + 'static,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut d = f.debug_struct("Rewrite");
@@ -50,14 +51,14 @@ where
     }
 }
 
-impl<L: Language, N: Analysis<L>> Rewrite<L, N> {
+impl<L: Language, T: FfnLattice, N: Analysis<L,T>> Rewrite<L, T, N> {
     /// Create a new [`Rewrite`]. You typically want to use the
     /// [`rewrite!`] macro instead.
     ///
     pub fn new(
         name: impl Into<Symbol>,
-        searcher: impl Searcher<L, N> + Send + Sync + 'static,
-        applier: impl Applier<L, N> + Send + Sync + 'static,
+        searcher: impl Searcher<L, T, N> + Send + Sync + 'static,
+        applier: impl Applier<L, T, N> + Send + Sync + 'static,
     ) -> Result<Self, String> {
         let name = name.into();
         let searcher = Arc::new(searcher);
@@ -81,21 +82,21 @@ impl<L: Language, N: Analysis<L>> Rewrite<L, N> {
     /// Call [`search`] on the [`Searcher`].
     ///
     /// [`search`]: Searcher::search()
-    pub fn search(&self, egraph: &EGraph<L, N>) -> Vec<SearchMatches<L>> {
+    pub fn search(&self, egraph: &EGraph<L, T, N>) -> Vec<SearchMatches<L, T>> {
         self.searcher.search(egraph)
     }
 
     /// Call [`apply_matches`] on the [`Applier`].
     ///
     /// [`apply_matches`]: Applier::apply_matches()
-    pub fn apply(&self, egraph: &mut EGraph<L, N>, matches: &[SearchMatches<L>]) -> Vec<Id> {
+    pub fn apply(&self, egraph: &mut EGraph<L, T, N>, matches: &[SearchMatches<L, T>]) -> Vec<Id> {
         self.applier.apply_matches(egraph, matches, self.name)
     }
 
     /// This `run` is for testing use only. You should use things
     /// from the `egg::run` module
     #[cfg(test)]
-    pub(crate) fn run(&self, egraph: &mut EGraph<L, N>) -> Vec<Id> {
+    pub(crate) fn run(&self, egraph: &mut EGraph<L, T, N>) -> Vec<Id> {
         let start = crate::util::Instant::now();
 
         let matches = self.search(egraph);
@@ -122,14 +123,15 @@ impl<L: Language, N: Analysis<L>> Rewrite<L, N> {
 /// matching substititions.
 /// Right now the only significant [`Searcher`] is [`Pattern`].
 ///
-pub trait Searcher<L, N>
+pub trait Searcher<L, T, N>
 where
     L: Language,
-    N: Analysis<L>,
+    T: FfnLattice,
+    N: Analysis<L, T>,
 {
     /// Search one eclass, returning None if no matches can be found.
     /// This should not return a SearchMatches with no substs.
-    fn search_eclass(&self, egraph: &EGraph<L, N>, eclass: Id) -> Option<SearchMatches<L>>;
+    fn search_eclass(&self, egraph: &EGraph<L, T, N>, eclass: Id) -> Option<SearchMatches<L, T>>;
 
     // /// Computes the far-fetchedness of this pattern when instantiated with `subst`
     // fn ffn_of_subst(&self, egraph: &EGraph<L, N>, subst: &Subst) -> Ffn;
@@ -139,7 +141,7 @@ where
     /// This just calls [`search_eclass`] on each eclass.
     ///
     /// [`search_eclass`]: Searcher::search_eclass
-    fn search(&self, egraph: &EGraph<L, N>) -> Vec<SearchMatches<L>> {
+    fn search(&self, egraph: &EGraph<L, T, N>) -> Vec<SearchMatches<L,T>> {
         egraph
             .classes()
             .filter_map(|e| self.search_eclass(egraph, e.id))
@@ -147,7 +149,7 @@ where
     }
 
     /// Returns the number of matches in the e-graph
-    fn n_matches(&self, egraph: &EGraph<L, N>) -> usize {
+    fn n_matches(&self, egraph: &EGraph<L, T, N>) -> usize {
         self.search(egraph).iter().map(|m| m.substs.len()).sum()
     }
 
@@ -264,10 +266,11 @@ where
 /// let start = "(+ x (* y z))".parse().unwrap();
 /// Runner::default().with_expr(&start).run(rules);
 /// ```
-pub trait Applier<L, N>
+pub trait Applier<L, T, N>
 where
     L: Language,
-    N: Analysis<L>,
+    T: FfnLattice,
+    N: Analysis<L, T>,
 {
     /// Apply many substititions.
     ///
@@ -280,8 +283,8 @@ where
     /// [`apply_one`]: Applier::apply_one()
     fn apply_matches(
         &self,
-        egraph: &mut EGraph<L, N>,
-        matches: &[SearchMatches<L>],
+        egraph: &mut EGraph<L, T, N>,
+        matches: &[SearchMatches<L, T>],
         rule_name: Symbol
     ) -> Vec<Id> {
         let mut added = vec![];
@@ -318,9 +321,9 @@ where
     /// [`apply_matches`]: Applier::apply_matches()
     fn apply_one(
         &self,
-        egraph: &mut EGraph<L, N>,
+        egraph: &mut EGraph<L, T, N>,
         eclass: Id,
-        subst: &Subst,
+        subst: &Subst<T>,
         searcher_ast: Option<&PatternAst<L>>,
         rule_name: Symbol,
     ) -> Vec<Id>;
@@ -359,18 +362,19 @@ pub struct ConditionalApplier<C, A> {
     pub applier: A,
 }
 
-impl<C, A, N, L> Applier<L, N> for ConditionalApplier<C, A>
+impl<C, A, N, T, L> Applier<L, T, N> for ConditionalApplier<C, A>
 where
     L: Language,
-    C: Condition<L, N>,
-    A: Applier<L, N>,
-    N: Analysis<L>,
+    C: Condition<L, T, N>,
+    A: Applier<L, T, N>,
+    T: FfnLattice,
+    N: Analysis<L,T>,
 {
     fn apply_one(
         &self,
-        egraph: &mut EGraph<L, N>,
+        egraph: &mut EGraph<L, T, N>,
         eclass: Id,
-        subst: &Subst,
+        subst: &Subst<T>,
         searcher_ast: Option<&PatternAst<L>>,
         rule_name: Symbol,
     ) -> Vec<Id> {
@@ -398,17 +402,18 @@ where
 ///
 /// [`check`]: Condition::check()
 /// [`Fn`]: std::ops::Fn
-pub trait Condition<L, N>
+pub trait Condition<L, T, N>
 where
     L: Language,
-    N: Analysis<L>,
+    T: FfnLattice,
+    N: Analysis<L,T>,
 {
     /// Check a condition.
     ///
     /// `eclass` is the eclass [`Id`] where the match (`subst`) occured.
     /// If this is true, then the [`ConditionalApplier`] will fire.
     ///
-    fn check(&self, egraph: &mut EGraph<L, N>, eclass: Id, subst: &Subst) -> bool;
+    fn check(&self, egraph: &mut EGraph<L, T, N>, eclass: Id, subst: &Subst<T>) -> bool;
 
     /// Returns a list of variables that this Condition assumes are bound.
     ///
@@ -421,13 +426,14 @@ where
     }
 }
 
-impl<L, F, N> Condition<L, N> for F
+impl<L, F, T, N> Condition<L, T, N> for F
 where
     L: Language,
-    N: Analysis<L>,
-    F: Fn(&mut EGraph<L, N>, Id, &Subst) -> bool,
+    T: FfnLattice,
+    N: Analysis<L,T>,
+    F: Fn(&mut EGraph<L, T, N>, Id, &Subst<T>) -> bool,
 {
-    fn check(&self, egraph: &mut EGraph<L, N>, eclass: Id, subst: &Subst) -> bool {
+    fn check(&self, egraph: &mut EGraph<L, T, N>, eclass: Id, subst: &Subst<T>) -> bool {
         self(egraph, eclass, subst)
     }
 }
@@ -438,19 +444,19 @@ where
 /// if and only if they are equivalent (in the same eclass).
 ///
 #[derive(Debug)]
-pub struct ConditionEqual<L> {
-    p1: Pattern<L>,
-    p2: Pattern<L>,
+pub struct ConditionEqual<L,T: FfnLattice> {
+    p1: Pattern<L,T>,
+    p2: Pattern<L,T>,
 }
 
-impl<L: Language> ConditionEqual<L> {
+impl<L: Language, T: FfnLattice> ConditionEqual<L,T> {
     /// Create a new [`ConditionEqual`] condition given two patterns.
-    pub fn new(p1: Pattern<L>, p2: Pattern<L>) -> Self {
+    pub fn new(p1: Pattern<L,T>, p2: Pattern<L,T>) -> Self {
         ConditionEqual { p1, p2 }
     }
 }
 
-impl<L: FromOp> ConditionEqual<L> {
+impl<L: FromOp, T: FfnLattice> ConditionEqual<L,T> {
     /// Create a ConditionEqual by parsing two pattern strings.
     ///
     /// This panics if the parsing fails.
@@ -462,12 +468,13 @@ impl<L: FromOp> ConditionEqual<L> {
     }
 }
 
-impl<L, N> Condition<L, N> for ConditionEqual<L>
+impl<L, T, N> Condition<L, T, N> for ConditionEqual<L,T>
 where
     L: Language,
-    N: Analysis<L>,
+    T: FfnLattice,
+    N: Analysis<L, T>,
 {
-    fn check(&self, _egraph: &mut EGraph<L, N>, _eclass: Id, _subst: &Subst) -> bool {
+    fn check(&self, _egraph: &mut EGraph<L, T, N>, _eclass: Id, _subst: &Subst<T>) -> bool {
         panic!("TODO: here we should not use apply_pat, but a variant of apply_pat that does not add new terms");
         /*
         let mut id_buf_1 = vec![0.into(); self.p1.ast.as_ref().len()];
@@ -491,7 +498,7 @@ mod tests {
     use crate::{SymbolLang as S, *};
     use std::str::FromStr;
 
-    type EGraph = crate::EGraph<S, ()>;
+    type EGraph = crate::EGraph<S, i32, ()>;
 
     #[test]
     fn conditional_rewrite() {

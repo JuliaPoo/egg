@@ -4,15 +4,232 @@ use egg::*;
 use std::io;
 use std::time::Instant;
 use std::env;
-use symbolic_expressions::*;
+use symbolic_expressions::{Sexp};
 // use std::convert::TryInto;
 use std::str::FromStr;
 use std::fs::File;
 use std::io::{BufWriter, Write, BufRead};
-use hashbrown::HashMap;
+// use hashbrown::HashMap;
 use std::convert::TryFrom;
 use log::*;
+use std::{
+    convert::Infallible,
+    fmt::{self, Debug, Display, Formatter},
+};
+use std::cmp::{Ordering, min};
 
+
+type BuildHasher = fxhash::FxBuildHasher;
+type HashMap<K, V> = hashbrown::HashMap<K, V, BuildHasher>;
+
+
+/// A simple language used for testing.
+#[derive(Debug, Hash, PartialEq, Eq, Clone, PartialOrd, Ord)]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
+pub enum CoquetierLang{
+        /// A number mainly used for ffn
+        Num(i32),
+        /// Interesting symbolic enode
+        Symb(Symbol, Vec<Id>),
+    }
+// pub struct CoquetierLang {
+//     /// The operator for an enode
+//     pub op: Symbol,
+//     /// The enode's children `Id`s
+//     pub children: Vec<Id>,
+// }
+
+impl CoquetierLang {
+    /// Create an enode with the given string and children
+    pub fn new(op: impl Into<Symbol>, children: Vec<Id>) -> Self {
+        let op = op.into();
+        Self::Symb(op, children)
+    }
+
+    /// Create childless enode with the given string
+    pub fn leaf(op: impl Into<Symbol>) -> Self {
+        Self::new(op, vec![])
+    }
+}
+
+impl Language for CoquetierLang {
+    fn enode_num(&self) -> Option<i32> {
+        match self {
+            Self::Num(a) => { return Some(*a); }
+            _ => { return None;}
+        }
+    }
+
+    fn num_enode(num: i32) -> Option<Self> {
+        return Some(Self::Num(num));
+    }
+
+    fn matches(&self, other: &Self) -> bool {
+        match (self,other) {
+            (Self::Symb(op1,v1),Self::Symb(op2,v2))=> {
+                return op1 == op2 && v1.len() == v2.len();
+            }
+            (Self::Num(a), Self::Num(b)) => { return a == b; } 
+            (_,_) => { return false;}
+        }
+    }
+
+    fn children(&self) -> &[Id] {
+        match &self {
+            Self::Num(_) => { return &[]; }
+            Self::Symb(_op, children) => { return children; }
+        }
+    }
+
+    fn children_mut(&mut self) -> &mut [Id] {
+        match self {
+            Self::Symb(_op, children) => { return children; }
+            Self::Num(_) => { return &mut []; } // Suspicious?
+        }
+    }
+}
+
+impl Display for CoquetierLang {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Symb(op,_children) => { Display::fmt(op, f) }
+            Self::Num(a) => { Display::fmt(a,f) }
+        }
+    }
+}
+
+impl FromOp for CoquetierLang {
+    type Error = Infallible;
+
+    fn from_op(op: &str, children: Vec<Id>) -> Result<Self, Self::Error> {
+        match op.parse::<i32>() {
+            Ok(n) => { Ok(Self::Num(n)) }
+            Err(_) => { Ok(Self::Symb(op.into(), children)) }
+        }
+    }
+}
+
+
+/// Cost of terms to control simplification
+#[warn(missing_docs)]
+pub struct MotivateTrue<'a>{
+    /// Number of terms that we are looking for
+    pub number_appear: usize,
+    /// Symbols we want to make expensive
+    pub motivated: &'a HashMap<String, f64>
+}
+fn pmin(v1: Vec<i64>, v2:Vec<i64>) -> Vec<i64> {
+    let mut res = Vec::new();
+    for (idx,e) in v1.iter().enumerate() {
+        res.push(min(e,&v2[idx]).clone());
+    }
+    return res;
+}
+
+impl CostFunction<CoquetierLang> for MotivateTrue<'_> {
+    type Cost = (Vec<i64>, f64);
+    fn cost<C>(&mut self, enode: &CoquetierLang, mut costs: C) -> Self::Cost
+    where
+        C: FnMut(Id) -> Self::Cost
+    {
+        
+        let op_cost = 
+            match &enode {
+            CoquetierLang::Num(_) => { &0.0 }
+            CoquetierLang::Symb(op,_children) => { self.motivated.get(&op.to_string()).unwrap_or(&4.0) }
+            };
+        let cost_post_mandate = enode.fold(*op_cost, |sum, id| 
+                    sum + costs(id).1);
+        let repeat1 = vec![1; self.number_appear];
+        let cost_vector = enode.fold(repeat1, |sum, id| 
+                    pmin(sum, costs(id).0));
+        return (cost_vector, cost_post_mandate);
+
+    }
+}
+
+
+impl Analysis<CoquetierLang, i32> for HashMap<CoquetierLang, i32> {
+    type Data = HashMap<CoquetierLang, i32>;
+
+    fn get_ffn(map : &Self::Data, enode: &CoquetierLang) -> i32 { 
+        let s = map.get(enode);
+        info!("Try to search enode: {:?} ffn: {:?}", enode, s);
+        return *s.unwrap_or(&0);
+        // return 0;
+    }
+    fn make(_egraph: &EGraph<CoquetierLang, i32, Self>, enode: &CoquetierLang, ffn: i32) -> Self::Data {
+        // In the egraph we should keep track of the current ffn level? This is not good enough.
+        // we should pass another value to build the analysis
+        let mut m : Self::Data = Default::default();
+        m.insert(enode.clone(),ffn);
+        return m;
+    }
+
+    fn merge(&mut self, a: &mut Self::Data, b: Self::Data) -> DidMerge {
+        // Merge is straightforward: key are merged the same way that classes
+        // are merged (enodes are canonicalized), and the values are min-ed together
+        // DidMerge(false, false)
+        let mut change = false;
+        for (key, value) in b {
+            if let Some(v) = a.get(&key) {
+                if value != *v { change = true; }
+                a.insert(key, std::cmp::min(value,*v));
+            } else {
+                a.insert(key, value);
+            }
+        }
+        DidMerge(change, false)
+    }
+
+    // fn pre_union(egraph: &EGraph<L, Self>, id1: Id, id2: Id) {}
+    fn modify(egraph: &mut EGraph<CoquetierLang, i32, Self>, id: Id) -> bool { 
+        let mut m : Self::Data = Default::default();
+        let mut change = false;
+        for (key, value) in &egraph[id].data {
+            let normalized_key = key.clone().map_children(|i| egraph.find(i));
+            if let Some(v) = m.get(&normalized_key) {
+                if v != value { change = true; }
+                m.insert(normalized_key, std::cmp::min(*value,*v));
+
+            } else {
+                m.insert(normalized_key, *value);
+            }
+        }
+        egraph[id].data = m;
+        return change;
+    }
+}
+
+/// A utility for implementing [`Analysis::merge`]
+/// when the `Data` type has a total ordering.
+/// This will take the maximum of the two values.
+pub fn merge_max<T: Ord>(to: &mut T, from: T) -> DidMerge {
+    let cmp = (*to).cmp(&from);
+    match cmp {
+        Ordering::Less => {
+            *to = from;
+            DidMerge(true, false)
+        }
+        Ordering::Equal => DidMerge(false, false),
+        Ordering::Greater => DidMerge(false, true),
+    }
+}
+
+/// A utility for implementing [`Analysis::merge`]
+/// when the `Data` type has a total ordering.
+/// This will take the minimum of the two values.
+pub fn merge_min<T: Ord>(to: &mut T, from: T) -> DidMerge {
+    let cmp = (*to).cmp(&from);
+    match cmp {
+        Ordering::Less => DidMerge(false, true),
+        Ordering::Equal => DidMerge(false, false),
+        Ordering::Greater => {
+            *to = from;
+            DidMerge(true, false)
+        }
+    }
+}
 
 
 
@@ -51,10 +268,10 @@ impl Rule {
         !self.sideconditions.is_empty() || !self.triggers.is_empty()
     }
 
-    pub fn to_rewrite(&self) -> Rewrite<SymbolLang, i32, HashMap<SymbolLang, i32, fxhash::FxBuildHasher>> {
+    pub fn to_rewrite(&self) -> Rewrite<CoquetierLang, i32, HashMap<CoquetierLang, i32>> {
         // if e is (= A B), returns [(name, A); (name, B)]
         // else returns [(name, e)]
-        fn multipattern_part(name: &str, e: &Sexp) -> Vec<(Var, PatternAst<SymbolLang>)> {
+        fn multipattern_part(name: &str, e: &Sexp) -> Vec<(Var, PatternAst<CoquetierLang>)> {
             let v = Var::from_str(name).unwrap();
             if e.is_list() && e.list_name().unwrap() == "=" {
                 e.list().unwrap()[1..].iter().map(|p| (v, p.to_string().parse().unwrap())).collect()
@@ -63,9 +280,9 @@ impl Rule {
             }
         }
 
-        let applier: Pattern<SymbolLang, i32> = self.conclusion_rhs.to_string().parse().unwrap();
+        let applier: Pattern<CoquetierLang, i32> = self.conclusion_rhs.to_string().parse().unwrap();
         if self.needs_multipattern() {
-            let mut patterns: Vec<(Var, PatternAst<SymbolLang>)> = Vec::new();
+            let mut patterns: Vec<(Var, PatternAst<CoquetierLang>)> = Vec::new();
             for (i, p) in self.sideconditions.iter().enumerate() {
                 patterns.extend(multipattern_part(&format!("?$hyp{}", i), p))
             }
@@ -73,11 +290,11 @@ impl Rule {
                 patterns.extend(multipattern_part(&format!("?$pat{}", i), p))
             }
             patterns.extend(multipattern_part("?$lhs", &self.conclusion_lhs));
-            let searcher: MultiPattern<SymbolLang,i32> = MultiPattern::new(patterns);
+            let searcher: MultiPattern<CoquetierLang,i32> = MultiPattern::new(patterns);
             // println!("{}: {} => {}", self.rulename, searcher, applier);
             Rewrite::new(self.rulename.clone(), searcher, applier).unwrap()
         } else {
-            let searcher: Pattern<SymbolLang, i32> = self.conclusion_lhs.to_string().parse::<Pattern<SymbolLang,i32>>().unwrap();
+            let searcher: Pattern<CoquetierLang, i32> = self.conclusion_lhs.to_string().parse::<Pattern<CoquetierLang,i32>>().unwrap();
             // println!("{}: {} => {}", self.rulename, searcher, applier);
             Rewrite::new(self.rulename.clone(), searcher, applier).unwrap()
         }
@@ -89,15 +306,15 @@ struct Server {
     infile : String,
     outfile : String,
     rules: Vec<Rule>,
-    runner: Runner<SymbolLang, i32, HashMap<SymbolLang, i32, fxhash::FxBuildHasher>>, // TODO Analysis: 
+    runner: Runner<CoquetierLang, i32, HashMap<CoquetierLang, i32>>, // TODO Analysis: 
     //  ,
-    cost: HashMap<String, f64,  fxhash::FxBuildHasher>,
-    require_terms : Vec<RecExpr<SymbolLang>> 
+    cost: HashMap<String, f64>,
+    require_terms : Vec<RecExpr<CoquetierLang>> 
 }
 
 impl Server {
     pub fn new(infile: String, outfile:String) -> Self {
-    let mut c:HashMap<String, f64,  fxhash::FxBuildHasher> = Default::default();
+    let mut c:HashMap<String, f64> = Default::default();
         c.insert("&True".to_string(),1.0);
         c.insert("&Prop".to_string(),1.0);
         Self { 
@@ -157,7 +374,7 @@ impl Server {
     fn process_require(&mut self, l: Vec<Sexp>) -> () {
         match &l[1] {
             res => { 
-                let expr : RecExpr<SymbolLang> = res.to_string().parse().unwrap();
+                let expr : RecExpr<CoquetierLang> = res.to_string().parse().unwrap();
                 self.runner.add_expr(&expr);
                 self.require_terms.push(expr); 
             }
@@ -187,7 +404,7 @@ impl Server {
 
     fn process_initial_expr(&mut self, se: &Sexp) -> () {
         // TODO can we avoid the round-trip?
-        let expr: RecExpr<SymbolLang> = se.to_string().parse().unwrap();
+        let expr: RecExpr<CoquetierLang> = se.to_string().parse().unwrap();
         // TODO can we avoid inlining Runner.with_expr?
         //self.runner = self.runner.with_expr(&sy);
         self.runner.add_expr(&expr);
@@ -266,10 +483,10 @@ impl Server {
     }
 
     fn process_search(&mut self, l: Vec<Sexp>) -> () {
-        let expr: Pattern<SymbolLang, i32> = l[1].to_string().parse().unwrap();
+        let expr: Pattern<CoquetierLang, i32> = l[1].to_string().parse().unwrap();
         // let ffn_limit: Ffn = l[2].i().unwrap().try_into().unwrap();
         // self.runner.ffn_limit = ffn_limit;
-        let rewrites: Vec<Rewrite<SymbolLang, i32, HashMap<SymbolLang, i32, fxhash::FxBuildHasher>>> = self.rules.iter().map(|r| r.to_rewrite()).collect();
+        let rewrites: Vec<Rewrite<CoquetierLang, i32, HashMap<CoquetierLang, i32>>> = self.rules.iter().map(|r| r.to_rewrite()).collect();
         let t = Instant::now();
         self.runner.run_nonchained(rewrites.iter());
         let saturation_time = t.elapsed().as_secs_f64();
@@ -318,14 +535,14 @@ impl Server {
     fn process_minimize(&mut self, l: Vec<Sexp>) -> () {
         let ffn_limit: usize = usize::try_from(l[2].i().unwrap()).unwrap();
         self.runner.set_iter_limit(ffn_limit + 4);
-        let expr: RecExpr<SymbolLang> = l[1].to_string().parse().unwrap();
-        let expr0: RecExpr<SymbolLang> = "0".to_string().parse().unwrap();
-        let expr1: RecExpr<SymbolLang> = "1".to_string().parse().unwrap();
-        let expr2: RecExpr<SymbolLang> = "2".to_string().parse().unwrap();
-        let expr3: RecExpr<SymbolLang> = "3".to_string().parse().unwrap();
-        let expr4: RecExpr<SymbolLang> = "4".to_string().parse().unwrap();
-        let expr5: RecExpr<SymbolLang> = "5".to_string().parse().unwrap();
-        let expr6: RecExpr<SymbolLang> = "6".to_string().parse().unwrap();
+        let expr: RecExpr<CoquetierLang> = l[1].to_string().parse().unwrap();
+        let expr0: RecExpr<CoquetierLang> = "0".to_string().parse().unwrap();
+        let expr1: RecExpr<CoquetierLang> = "1".to_string().parse().unwrap();
+        let expr2: RecExpr<CoquetierLang> = "2".to_string().parse().unwrap();
+        let expr3: RecExpr<CoquetierLang> = "3".to_string().parse().unwrap();
+        let expr4: RecExpr<CoquetierLang> = "4".to_string().parse().unwrap();
+        let expr5: RecExpr<CoquetierLang> = "5".to_string().parse().unwrap();
+        let expr6: RecExpr<CoquetierLang> = "6".to_string().parse().unwrap();
         self.runner.add_expr(&expr0);
         self.runner.add_expr(&expr1);
         self.runner.add_expr(&expr2);
@@ -335,7 +552,7 @@ impl Server {
         self.runner.add_expr(&expr6);
         self.runner.add_expr(&expr);
 
-        let rewrites: Vec<Rewrite<SymbolLang, i32, HashMap<SymbolLang, i32, fxhash::FxBuildHasher>>> = self.rules.iter().map(|r| r.to_rewrite()).collect();
+        let rewrites: Vec<Rewrite<CoquetierLang, i32, HashMap<CoquetierLang, i32>>> = self.rules.iter().map(|r| r.to_rewrite()).collect();
         let t = Instant::now();
         self.runner.run_nonchained(rewrites.iter());
         let saturation_time = t.elapsed().as_secs_f64();
@@ -366,7 +583,7 @@ impl Server {
         }
 
 
-        let to_search : Vec<((Vec<i64>, f64), RecExpr<SymbolLang>)> = terms.iter().enumerate().map(|(idx,e)| 
+        let to_search : Vec<((Vec<i64>, f64), RecExpr<CoquetierLang>)> = terms.iter().enumerate().map(|(idx,e)| 
                                                     ((kronecker(length ,idx),0.),e.clone())).collect();
         let extractor = Extractor::new(&self.runner.egraph, MotivateTrue{motivated: &self.cost, number_appear: to_search.len()}, to_search);
         let (best_cost, best) = extractor.find_best(root);
@@ -383,8 +600,8 @@ impl Server {
         match &ctor_equals {
             Some((t1,t2)) => { 
                 let t = Instant::now();
-                let exprt1 : RecExpr<SymbolLang>= t1.parse().unwrap();
-                let exprt2 : RecExpr<SymbolLang>= t2.parse().unwrap();
+                let exprt1 : RecExpr<CoquetierLang>= t1.parse().unwrap();
+                let exprt2 : RecExpr<CoquetierLang>= t2.parse().unwrap();
                 
                 // println!("Absurd found the following contradiction: {} {}", exprt1, exprt2);
                 let explanations = self.runner.explain_equivalence(&exprt1, &exprt2).get_flat_sexps();

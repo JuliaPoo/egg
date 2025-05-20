@@ -19,3 +19,6 @@ perf.data*
 coq_eclasses_log.txt
 coquetier_input.smt2
 coquetier_proof_output.txt
+
+*.in
+*.out

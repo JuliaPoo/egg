@@ -730,6 +730,7 @@ where
     }
 }
 
+
 fn check_rules<L, T, N>(rules: &[&Rewrite<L, T, N>]) {
     let mut name_counts = IndexMap::default();
     for rw in rules {

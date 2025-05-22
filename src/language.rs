@@ -40,10 +40,6 @@ impl FfnLattice for i32 {
 /// See [`SymbolLang`] for quick-and-dirty use cases.
 #[allow(clippy::len_without_is_empty)]
 pub trait Language: Debug + Clone + Eq + Ord + Hash + Send + Sync {
-    // Need the notion of number primitive enode
-    fn enode_num(&self) -> Option<i32>;
-
-    fn num_enode(num: i32) -> Option<Self>; 
 
     /// Returns true if this enode matches another enode.
     /// This should only consider the operator, not the children `Id`s.
@@ -224,6 +220,13 @@ pub trait Language: Debug + Clone + Eq + Ord + Hash + Send + Sync {
         nodes.push(self.clone().map_children(|id| ids[&id]));
         Ok(RecExpr::from(nodes))
     }
+}
+
+#[allow(clippy::len_without_is_empty)]
+pub trait FfnLanguage: Debug + Clone + Eq + Ord + Hash + Send + Sync + Language {
+    // Need the notion of number primitive enode
+    fn enode_num(&self) -> Option<i32>;
+    fn num_enode(num: i32) -> Option<Self>;
 }
 
 /// A trait for parsing e-nodes. This is implemented automatically by
@@ -872,17 +875,6 @@ impl SymbolLang {
 }
 
 impl Language for SymbolLang {
-    fn enode_num(&self) -> Option<i32> {
-        match self {
-            Self::Num(a) => { return Some(*a); }
-            _ => { return None;}
-        }
-    }
-
-    fn num_enode(num: i32) -> Option<Self> {
-        return Some(Self::Num(num));
-    }
-
     fn matches(&self, other: &Self) -> bool {
         match (self,other) {
             (Self::Symb(op1,v1),Self::Symb(op2,v2))=> {

@@ -1,6 +1,7 @@
 use symbolic_expressions::*;
-use std::io::{Write};
+use std::io::{Write, Cursor};
 use std::cmp::min;
+use log::*;
 use crate::*;
 
 /// Remove typer annotations and add "hole" in case of explanations
@@ -61,6 +62,13 @@ fn add_arity_th_name(lemma_arity: &dyn Fn(&str) -> usize, e: &Sexp) -> Sexp {
     }
 }
 
+const SPECIAL_RULES: [&str; 4] = [
+    "%Q_cast_plus%",
+    "%Q_cast_mult%",
+    "%Q_cast_minus%",
+    "%constant_fold%",
+];
+
 fn find_rw(lemma_arity: &dyn Fn(&str) -> usize, e: &Sexp) -> Option<(bool, String, Sexp, Sexp)> {
     match e {
         Sexp::String(_s) => return None,
@@ -72,6 +80,10 @@ fn find_rw(lemma_arity: &dyn Fn(&str) -> usize, e: &Sexp) -> Option<(bool, Strin
                         let fw1 = op.starts_with("Rewrite=>");
                         match &l[1] {
                             Sexp::String(s) => {
+                                if SPECIAL_RULES.contains(&s.as_str()) {
+                                    // (holified, fw, name_th, applied_th, new)
+                                    return Some((true, s.to_string(), add_arity_th_name(lemma_arity, &l[1]), l[2].clone()))
+                                }
                                 let fw2 = !s.contains("-rev");
                                 let fw = fw1 ^ fw2;
                                 return Some((fw, s.to_string(), add_arity_th_name(lemma_arity, &l[1]), l[2].clone()))
@@ -199,6 +211,30 @@ impl CostFunction<SymbolLang> for MotivateTrue<'_> {
     }
 }
 
+fn eval(sexp: &Sexp) -> Result<i64, String> {
+    match sexp {
+        Sexp::String(s) => Ok(s.parse::<i64>().expect(&format!("{} not a valid i64", s))),
+        Sexp::Empty => Err("Empty Sexpr".to_string()),
+        Sexp::List(list) => {
+            if list.len() != 3 {
+                return Err(format!("Expected 3 elements (operator and 2 operands), got {}", list.len()));
+            }
+            let op = &list[0];
+            let a = eval(&list[1])?;
+            let b = eval(&list[2])?;
+
+            match op {
+                Sexp::String(op_str) => match op_str.as_str() {
+                    "+" => Ok(a + b),
+                    "-" => Ok(a - b),
+                    "*" => Ok(a * b),
+                    _ => Err(format!("Unknown operator: {}", op_str)),
+                },
+                _ => Err("Operator must be a symbol".to_string()),
+            }
+        }
+    }
+}
 
 /// Print equality proof as a Coq script with unselve and one eapply per step
 #[allow(unused_must_use)]
@@ -209,9 +245,39 @@ pub fn print_equality_proof_to_writer<W: Write>(
     is_eq: &dyn Fn(&str) -> Option<bool>,
     lemma_arity: &dyn Fn(&str) -> usize
 ) -> () {
-    writeln!(writer, "unshelve (");
+    let mut buffer = Cursor::new(Vec::new());
+    let mut prefix = Cursor::new(Vec::new());
+    writeln!(prefix, "unshelve (");
     for exp in explanation {
+        info!("Writing explanation line: {}", exp);
         let (holified, fw, name_th, applied_th, new) = holify(lemma_arity, exp);
+        if SPECIAL_RULES.contains(&name_th.as_str()) {
+            // if name_th == "%constant_fold%" { continue; }
+            // if ["%Q_cast_plus%", "%Q_cast_mult%", "%Q_cast_minus%"].contains(&name_th.as_str()) {
+            if name_th == "%constant_fold%" {
+                // let folded_expr = new.list().unwrap().get(1).unwrap().list().unwrap();
+                // let a = folded_expr.get(1).unwrap().i().unwrap();
+                // let b = folded_expr.get(2).unwrap().i().unwrap();
+                // let res = a + b;
+                // // writeln!(prefix, "assert (special_rule_{special_rule_id} : @eq Q (Qplus (Qmake {a} xH) (Qmake {b} xH)) (Qmake {res} xH)) by reflexivity.");
+                // writeln!(prefix, "assert (@eq Q (Qplus (Qmake {a} xH) (Qmake {b} xH)) (Qmake {res} xH)) by reflexivity.");
+                // // writeln!(buffer, "eapply (@rew_zoom_fw _ (Qmake {res} xH) _ special_rule_{special_rule_id} (fun hole => {holified}));");
+                // writeln!(buffer, "eapply (@rew_zoom_fw _ (Qmake {res} xH) _ _ (fun hole => {holified}));");
+                
+                // special_rule_id += 1;
+
+                if "*+-".chars().any(|c| holified.to_string().contains(c)) { continue; }
+                
+                info!("NEW: {}", new.to_string());
+                if !new.is_list() {continue;}
+                let res = eval(&new).unwrap();
+
+                writeln!(prefix, "assert {new}={res} by reflexivity.");
+                writeln!(buffer, "eapply (@rew_zoom_fw _ {res}%Z _ _ (fun hole => {holified}));");
+            
+            }
+            continue;
+        }
         // println!("Writing {name_th}");
         let ref1 = String::from("eggTypeEmbedding");
         let ref2 = String::from("eggTypeEmbedding2");
@@ -224,13 +290,16 @@ pub fn print_equality_proof_to_writer<W: Write>(
             format!("(prove_True_eq _ {applied_th})") 
         };
         if is_absurd {
-            writeln!(writer, "eapply ({rw_lemma} _ {new} _ {th} (fun hole => {holified} = _));");
+            writeln!(buffer, "eapply ({rw_lemma} _ {new} _ {th} (fun hole => {holified} = _));");
         }
         else {
-            writeln!(writer, "eapply ({rw_lemma} _ {new} _ {th} (fun hole => {holified}));");
+            writeln!(buffer, "eapply ({rw_lemma} _ {new} _ {th} (fun hole => {holified}));");
         }
         
     }
-    writeln!(writer, "idtac).");
+    writeln!(buffer, "idtac).");
+    
+    writer.write_all(&prefix.into_inner());
+    writer.write_all(&buffer.into_inner());
     writer.flush().expect("error flushing");
 }

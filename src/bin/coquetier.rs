@@ -1,6 +1,6 @@
 /// coquetier (french for egg server)
 
-use egg::*;
+use egg::{*, rewrite as rw};
 use std::io;
 use std::time::Instant;
 use std::env;
@@ -13,8 +13,7 @@ use std::io::{BufWriter, Write, BufRead};
 use std::convert::TryFrom;
 use log::*;
 use std::{
-    convert::Infallible,
-    fmt::{self, Debug, Display, Formatter},
+    fmt::{Debug},
 };
 use std::cmp::{Ordering, min};
 
@@ -22,93 +21,15 @@ use std::cmp::{Ordering, min};
 type BuildHasher = fxhash::FxBuildHasher;
 type HashMap<K, V> = hashbrown::HashMap<K, V, BuildHasher>;
 
-
-/// A simple language used for testing.
-#[derive(Debug, Hash, PartialEq, Eq, Clone, PartialOrd, Ord)]
-#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
-pub enum CoquetierLang{
-        /// A number mainly used for ffn
-        Num(i32),
-        /// Interesting symbolic enode
+define_language! {
+    enum CoquetierLang {
+        "+" = Add([Id; 2]),
+        "*" = Mul([Id; 2]),
+        "-" = Sub([Id; 2]),
+        Num(i64),
         Symb(Symbol, Vec<Id>),
     }
-// pub struct CoquetierLang {
-//     /// The operator for an enode
-//     pub op: Symbol,
-//     /// The enode's children `Id`s
-//     pub children: Vec<Id>,
-// }
-
-impl CoquetierLang {
-    /// Create an enode with the given string and children
-    pub fn new(op: impl Into<Symbol>, children: Vec<Id>) -> Self {
-        let op = op.into();
-        Self::Symb(op, children)
-    }
-
-    /// Create childless enode with the given string
-    pub fn leaf(op: impl Into<Symbol>) -> Self {
-        Self::new(op, vec![])
-    }
 }
-
-impl Language for CoquetierLang {
-    fn enode_num(&self) -> Option<i32> {
-        match self {
-            Self::Num(a) => { return Some(*a); }
-            _ => { return None;}
-        }
-    }
-
-    fn num_enode(num: i32) -> Option<Self> {
-        return Some(Self::Num(num));
-    }
-
-    fn matches(&self, other: &Self) -> bool {
-        match (self,other) {
-            (Self::Symb(op1,v1),Self::Symb(op2,v2))=> {
-                return op1 == op2 && v1.len() == v2.len();
-            }
-            (Self::Num(a), Self::Num(b)) => { return a == b; } 
-            (_,_) => { return false;}
-        }
-    }
-
-    fn children(&self) -> &[Id] {
-        match &self {
-            Self::Num(_) => { return &[]; }
-            Self::Symb(_op, children) => { return children; }
-        }
-    }
-
-    fn children_mut(&mut self) -> &mut [Id] {
-        match self {
-            Self::Symb(_op, children) => { return children; }
-            Self::Num(_) => { return &mut []; } // Suspicious?
-        }
-    }
-}
-
-impl Display for CoquetierLang {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Symb(op,_children) => { Display::fmt(op, f) }
-            Self::Num(a) => { Display::fmt(a,f) }
-        }
-    }
-}
-
-impl FromOp for CoquetierLang {
-    type Error = Infallible;
-
-    fn from_op(op: &str, children: Vec<Id>) -> Result<Self, Self::Error> {
-        match op.parse::<i32>() {
-            Ok(n) => { Ok(Self::Num(n)) }
-            Err(_) => { Ok(Self::Symb(op.into(), children)) }
-        }
-    }
-}
-
 
 /// Cost of terms to control simplification
 #[warn(missing_docs)]
@@ -132,11 +53,13 @@ impl CostFunction<CoquetierLang> for MotivateTrue<'_> {
     where
         C: FnMut(Id) -> Self::Cost
     {
-        
         let op_cost = 
             match &enode {
             CoquetierLang::Num(_) => { &0.0 }
             CoquetierLang::Symb(op,_children) => { self.motivated.get(&op.to_string()).unwrap_or(&4.0) }
+            CoquetierLang::Add(_) => { &f64::INFINITY } // Shouldn't appear in our output expressions
+            CoquetierLang::Mul(_) => { &f64::INFINITY }
+            CoquetierLang::Sub(_) => { &f64::INFINITY }
             };
         let cost_post_mandate = enode.fold(*op_cost, |sum, id| 
                     sum + costs(id).1);
@@ -148,58 +71,132 @@ impl CostFunction<CoquetierLang> for MotivateTrue<'_> {
     }
 }
 
+// type NodeDataType = ();
+#[derive(Default)]
+pub struct ConstantFold;
+type NodeDataType = ConstantFold;
 
-impl Analysis<CoquetierLang, i32> for HashMap<CoquetierLang, i32> {
-    type Data = HashMap<CoquetierLang, i32>;
+impl Analysis<CoquetierLang, i32> for NodeDataType {
+    type Data = Option<(i64, PatternAst<CoquetierLang>)>;
 
-    fn get_ffn(map : &Self::Data, enode: &CoquetierLang) -> i32 { 
-        let s = map.get(enode);
-        info!("Try to search enode: {:?} ffn: {:?}", enode, s);
-        return *s.unwrap_or(&0);
-        // return 0;
-    }
-    fn make(_egraph: &EGraph<CoquetierLang, i32, Self>, enode: &CoquetierLang, ffn: i32) -> Self::Data {
-        // In the egraph we should keep track of the current ffn level? This is not good enough.
-        // we should pass another value to build the analysis
-        let mut m : Self::Data = Default::default();
-        m.insert(enode.clone(),ffn);
-        return m;
+    fn get_ffn(_map: &Self::Data, _enode: &CoquetierLang) -> i32 { 0 }
+
+    fn make(egraph: &EGraph<CoquetierLang, i32, Self>, enode: &CoquetierLang, _: i32) -> Self::Data {
+        let x = |i: &Id| egraph[*i].data.as_ref().map(|d| d.0);
+        Some(match enode {
+            CoquetierLang::Num(c) => (*c, format!("{}", c).parse().unwrap()),
+            CoquetierLang::Add([a, b]) => (
+                x(a)? + x(b)?,
+                format!("(+ {} {})", x(a)?, x(b)?).parse().unwrap(),
+            ),
+            CoquetierLang::Mul([a, b]) => (
+                x(a)? * x(b)?,
+                format!("(* {} {})", x(a)?, x(b)?).parse().unwrap(),
+            ),
+            CoquetierLang::Sub([a, b]) => (
+                x(a)? - x(b)?,
+                format!("(- {} {})", x(a)?, x(b)?).parse().unwrap(),
+            ),
+            _ => return None,
+        })
     }
 
     fn merge(&mut self, a: &mut Self::Data, b: Self::Data) -> DidMerge {
-        // Merge is straightforward: key are merged the same way that classes
-        // are merged (enodes are canonicalized), and the values are min-ed together
-        // DidMerge(false, false)
-        let mut change = false;
-        for (key, value) in b {
-            if let Some(v) = a.get(&key) {
-                if value != *v { change = true; }
-                a.insert(key, std::cmp::min(value,*v));
-            } else {
-                a.insert(key, value);
+        match (a.as_mut(), &b) {
+            (None, None) => DidMerge(false, false),
+            (None, Some(_)) => {
+                *a = b;
+                DidMerge(true, false)
             }
+            (Some(_), None) => DidMerge(false, true),
+            (Some(_), Some(_)) => DidMerge(false, false),
         }
-        DidMerge(change, false)
+        // if a.is_none() && b.is_some() {
+        //     *a = b
+        // }
+        // cmp
     }
 
-    // fn pre_union(egraph: &EGraph<L, Self>, id1: Id, id2: Id) {}
-    fn modify(egraph: &mut EGraph<CoquetierLang, i32, Self>, id: Id) -> bool { 
-        let mut m : Self::Data = Default::default();
-        let mut change = false;
-        for (key, value) in &egraph[id].data {
-            let normalized_key = key.clone().map_children(|i| egraph.find(i));
-            if let Some(v) = m.get(&normalized_key) {
-                if v != value { change = true; }
-                m.insert(normalized_key, std::cmp::min(*value,*v));
-
+    fn modify(egraph: &mut EGraph<CoquetierLang, i32, Self>, id: Id) -> bool {
+        let class = egraph[id].clone();
+        if let Some((c, pat)) = class.data {
+            if egraph.are_explanations_enabled() {
+                egraph.union_instantiations(
+                    &pat,
+                    &format!("{}", c).parse().unwrap(),
+                    &Default::default(),
+                    "%constant_fold%".to_string()
+                    // ffn_zero(),
+                );
             } else {
-                m.insert(normalized_key, *value);
+                let added = egraph.add(CoquetierLang::Num(c));
+                egraph.union(id, added);
             }
+            // to not prune, comment this out
+            egraph[id].nodes.retain(|n| n.is_leaf());
+
+            #[cfg(debug_assertions)]
+            egraph[id].assert_unique_leaves();
+            return true;
         }
-        egraph[id].data = m;
-        return change;
+        false
     }
 }
+
+
+
+// type NodeDataType = HashMap<CoquetierLang, i32>;
+// impl Analysis<CoquetierLang, i32> for NodeDataType {
+//     type Data = NodeDataType;
+
+//     fn get_ffn(map : &Self::Data, enode: &CoquetierLang) -> i32 { 
+//         let s = map.get(enode);
+//         info!("Try to search enode: {:?} ffn: {:?}", enode, s);
+//         return *s.unwrap_or(&0);
+//         // return 0;
+//     }
+//     fn make(_egraph: &EGraph<CoquetierLang, i32, Self>, enode: &CoquetierLang, ffn: i32) -> Self::Data {
+//         // In the egraph we should keep track of the current ffn level? This is not good enough.
+//         // we should pass another value to build the analysis
+//         let mut m : Self::Data = Default::default();
+//         m.insert(enode.clone(),ffn);
+//         return m;
+//     }
+
+//     fn merge(&mut self, a: &mut Self::Data, b: Self::Data) -> DidMerge {
+//         // Merge is straightforward: key are merged the same way that classes
+//         // are merged (enodes are canonicalized), and the values are min-ed together
+//         // DidMerge(false, false)
+//         let mut change = false;
+//         for (key, value) in b {
+//             if let Some(v) = a.get(&key) {
+//                 if value != *v { change = true; }
+//                 a.insert(key, std::cmp::min(value,*v));
+//             } else {
+//                 a.insert(key, value);
+//             }
+//         }
+//         DidMerge(change, false)
+//     }
+
+//     // fn pre_union(egraph: &EGraph<L, Self>, id1: Id, id2: Id) {}
+//     fn modify(egraph: &mut EGraph<CoquetierLang, i32, Self>, id: Id) -> bool { 
+//         let mut m : Self::Data = Default::default();
+//         let mut change = false;
+//         for (key, value) in &egraph[id].data {
+//             let normalized_key = key.clone().map_children(|i| egraph.find(i));
+//             if let Some(v) = m.get(&normalized_key) {
+//                 if v != value { change = true; }
+//                 m.insert(normalized_key, std::cmp::min(*value,*v));
+
+//             } else {
+//                 m.insert(normalized_key, *value);
+//             }
+//         }
+//         egraph[id].data = m;
+//         return change;
+//     }
+// }
 
 /// A utility for implementing [`Analysis::merge`]
 /// when the `Data` type has a total ordering.
@@ -268,7 +265,7 @@ impl Rule {
         !self.sideconditions.is_empty() || !self.triggers.is_empty()
     }
 
-    pub fn to_rewrite(&self) -> Rewrite<CoquetierLang, i32, HashMap<CoquetierLang, i32>> {
+    pub fn to_rewrite(&self) -> Rewrite<CoquetierLang, i32, NodeDataType> {
         // if e is (= A B), returns [(name, A); (name, B)]
         // else returns [(name, e)]
         fn multipattern_part(name: &str, e: &Sexp) -> Vec<(Var, PatternAst<CoquetierLang>)> {
@@ -306,7 +303,7 @@ struct Server {
     infile : String,
     outfile : String,
     rules: Vec<Rule>,
-    runner: Runner<CoquetierLang, i32, HashMap<CoquetierLang, i32>>, // TODO Analysis: 
+    runner: Runner<CoquetierLang, i32, NodeDataType>, // TODO Analysis: 
     //  ,
     cost: HashMap<String, f64>,
     require_terms : Vec<RecExpr<CoquetierLang>> 
@@ -323,7 +320,7 @@ impl Server {
 
             infile: infile,
             outfile: outfile,
-            rules: Default::default(), 
+            rules: Default::default(),
             runner: Runner::default()
                 .with_iter_limit(8)
                 .with_explanations_enabled()
@@ -477,16 +474,62 @@ impl Server {
     }
 
     fn lemma_arity(&self, name: &str) -> usize {
-        let r = self.rules.iter().find(|r| r.rulename == name).unwrap();
+        let r_opt = self.rules.iter().find(|r| r.rulename == name);
+        if r_opt.is_none() { return 0; }
+        let r = r_opt.unwrap();
         let quants : Vec<&String>= r.quantifiers.iter().filter(|s| !s.starts_with("?ffn")).collect();
         quants.len() + r.sideconditions.len()
+    }
+
+    fn obtain_rewrites(&mut self) -> Vec<Rewrite<CoquetierLang, i32, NodeDataType>> {
+        let mut rewrites: Vec<Rewrite<CoquetierLang, i32, NodeDataType>> = self.rules.iter().map(|r| r.to_rewrite()).collect();
+        rewrites.push(
+            rw!("%Q_cast_plus%";
+                "
+                (annot
+                    (&Qplus
+                        (annot (!Qmake (annot ?a ?c) (annot !xH &positive)) &Q)
+                        (annot (!Qmake (annot ?b ?c) (annot !xH &positive)) &Q))
+                    &Q)
+                "
+                =>
+                "(annot (!Qmake (annot (+ ?a ?b) ?c) (annot !xH &positive)) &Q)"
+            )
+        );
+        rewrites.push(
+            rw!("%Q_cast_mult%";
+                "
+                (annot
+                    (&Qmult
+                        (annot (!Qmake (annot ?a ?c) (annot !xH &positive)) &Q)
+                        (annot (!Qmake (annot ?b ?c) (annot !xH &positive)) &Q))
+                    &Q)
+                "
+                =>
+                "(annot (!Qmake (annot (* ?a ?b) ?c) (annot !xH &positive)) &Q)"
+            )
+        );
+        rewrites.push(
+            rw!("%Q_cast_minus%";
+                "
+                (annot
+                    (&Qminus
+                        (annot (!Qmake (annot ?a ?c) (annot !xH &positive)) &Q)
+                        (annot (!Qmake (annot ?b ?c) (annot !xH &positive)) &Q))
+                    &Q)
+                "
+                =>
+                "(annot (!Qmake (annot (- ?a ?b) ?c) (annot !xH &positive)) &Q)"
+            )
+        );
+        rewrites
     }
 
     fn process_search(&mut self, l: Vec<Sexp>) -> () {
         let expr: Pattern<CoquetierLang, i32> = l[1].to_string().parse().unwrap();
         // let ffn_limit: Ffn = l[2].i().unwrap().try_into().unwrap();
         // self.runner.ffn_limit = ffn_limit;
-        let rewrites: Vec<Rewrite<CoquetierLang, i32, HashMap<CoquetierLang, i32>>> = self.rules.iter().map(|r| r.to_rewrite()).collect();
+        let rewrites: Vec<Rewrite<CoquetierLang, i32, NodeDataType>> = self.obtain_rewrites();
         let t = Instant::now();
         self.runner.run_nonchained(rewrites.iter());
         let saturation_time = t.elapsed().as_secs_f64();
@@ -552,7 +595,7 @@ impl Server {
         self.runner.add_expr(&expr6);
         self.runner.add_expr(&expr);
 
-        let rewrites: Vec<Rewrite<CoquetierLang, i32, HashMap<CoquetierLang, i32>>> = self.rules.iter().map(|r| r.to_rewrite()).collect();
+        let rewrites: Vec<Rewrite<CoquetierLang, i32, NodeDataType>> = self.obtain_rewrites();
         let t = Instant::now();
         self.runner.run_nonchained(rewrites.iter());
         let saturation_time = t.elapsed().as_secs_f64();
@@ -604,7 +647,9 @@ impl Server {
                 let exprt2 : RecExpr<CoquetierLang>= t2.parse().unwrap();
                 
                 // println!("Absurd found the following contradiction: {} {}", exprt1, exprt2);
-                let explanations = self.runner.explain_equivalence(&exprt1, &exprt2).get_flat_sexps();
+                let mut expl = self.runner.explain_equivalence(&exprt1, &exprt2);
+                info!("{}", expl.get_string());
+                let explanations = expl.get_flat_sexps();
                 let expl_time = t.elapsed().as_secs_f64();
                 info!("Absurd found Explanation length: {} (took {:.3}s to generate)", explanations.len(), expl_time);
 
@@ -629,6 +674,8 @@ impl Server {
                 if self.verbose { println!("Wrote proof to {path}"); }}
             None => {
                 let t = Instant::now();
+                let mut expl = self.runner.explain_equivalence(&expr, &best);
+                info!("{}", expl.get_string());
                 let explanations = self.runner.explain_equivalence(&expr, &best).get_flat_sexps();
                 let expl_time = t.elapsed().as_secs_f64();
                 if self.verbose { println!("Explanation length: {} (took {:.3}s to generate)", explanations.len(), expl_time); }

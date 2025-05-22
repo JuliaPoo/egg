@@ -143,17 +143,6 @@ impl<L: Language> Language for ENodeOrVar<L> {
     fn matches(&self, _other: &Self) -> bool {
         panic!("Should never call this")
     }
-    fn enode_num(&self) -> Option<i32> {
-        // TODO do we need that?
-        return None;
-        // match self {
-        //     ENodeOrVar::ENode(n) => None
-        //     ENodeOrVar::Var(_) => None,
-        // }
-    }
-    fn num_enode(_num: i32) -> Option<Self> {
-        return None;
-    }
 
     fn children(&self) -> &[Id] {
         match self {
@@ -280,38 +269,39 @@ impl<'a, T : FfnLattice, L: Language> SearchMatches<'a, L, T> {
         _searcher: &std::sync::Arc<dyn Searcher<L, T, N> + Sync + Send>,
     ) -> () {
         // self.ffns.resize(self.substs.len(), 0); // <-- to disable ffn restrictions
-        let all_substs = &mut self.substs.clone();
-        self.substs.clear();
-        for i in all_substs {
-            // let x = &i.vec;
-            // let mut m = 0;
-            // for (_v,sid ) in x {
-            //     match sid {
-            //         Some(id) => {
-            //             let eclass = &_egraph[*id].nodes;
-            //             for i in eclass.iter() {
-            //                 match i.enode_num() {
-            //                     Some(x) => { m = std::cmp::max(m,x); }
-            //                     None => {}
-            //                 }
-            //             }
-            //         }
-            //         None => {}
-            //     }
-            // }
-            info!("Comparing ffns: {:?} <? {:?}",i.ffn, egraph.max_ffn);
-            if i.ffn < egraph.max_ffn {
-                // let n = L::num_enode(m+1).unwrap();
-                let n = L::num_enode(0).unwrap();
-                let id_n = egraph.lookup(n).unwrap();
-                // let mut newi = i.clone();
-                i.set_default(id_n);
-                i.set_ffn(i.ffn.inc());
-                self.substs.push(i.clone());
-            }
-         }
+        // let all_substs = &mut self.substs.clone();
+        // self.substs.clear();
+        // for i in all_substs {
+        //     // let x = &i.vec;
+        //     // let mut m = 0;
+        //     // for (_v,sid ) in x {
+        //     //     match sid {
+        //     //         Some(id) => {
+        //     //             let eclass = &_egraph[*id].nodes;
+        //     //             for i in eclass.iter() {
+        //     //                 match i.enode_num() {
+        //     //                     Some(x) => { m = std::cmp::max(m,x); }
+        //     //                     None => {}
+        //     //                 }
+        //     //             }
+        //     //         }
+        //     //         None => {}
+        //     //     }
+        //     // }
+        //     info!("Comparing ffns: {:?} <? {:?}",i.ffn, egraph.max_ffn);
+        //     if i.ffn < egraph.max_ffn {
+        //         // let n = L::num_enode(m+1).unwrap();
+        //         let n = L::num_enode(0).unwrap();
+        //         let id_n = egraph.lookup(n).unwrap();
+        //         // let mut newi = i.clone();
+        //         i.set_default(id_n);
+        //         i.set_ffn(i.ffn.inc());
+        //         self.substs.push(i.clone());
+        //     }
+        //  }
     }
 }
+
 
 impl<L: Language, T : FfnLattice, A: Analysis<L,T>> Searcher<L, T, A> for Pattern<L,T> {
     fn get_pattern_ast(&self) -> Option<&PatternAst<L>> {

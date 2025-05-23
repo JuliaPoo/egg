@@ -596,48 +596,48 @@ where
 
         let mut matches : Vec<Vec<SearchMatches<L,T>>>= Vec::new();
 
-        // result = result.and_then(|_| {
-        //     rules.iter().try_for_each(|rule| {
-        //         //println!("Rule {}:", rule.name);
-        //         let mut ms = self.scheduler.search_rewrite(i, &self.egraph, rule);
-        //         for search_matches in ms.iter_mut() {
-        //             //print!("Length before: {}, ", search_matches.substs.len());
-        //             search_matches.compute_and_filter_ffns(&self.egraph, &rule.searcher, self.ffn_limit);
-        //             //println!("length after shrinking: {}", search_matches.substs.len());
-        //         }
-        //         matches.push(ms);
-        //         self.check_limits()
-        //     })
-        // });
+        result = result.and_then(|_| {
+            rules.iter().try_for_each(|rule| {
+                //println!("Rule {}:", rule.name);
+                let mut ms = self.scheduler.search_rewrite(i, &self.egraph, rule);
+                for search_matches in ms.iter_mut() {
+                    //print!("Length before: {}, ", search_matches.substs.len());
+                    search_matches.compute_and_filter_ffns(&self.egraph, &rule.searcher);
+                    //println!("length after shrinking: {}", search_matches.substs.len());
+                }
+                matches.push(ms);
+                self.check_limits()
+            })
+        });
 
 // MULTICORE version
 
-        let egraph = &self.egraph;
-        // let (tx, rx) = mpsc::channel();
-        // let iter_r = rules.iter();
-        let l = rules.len();
-        thread::scope(|s| {
-            let mut threads = vec![];
-            for i in 0 .. l {
-                threads.push(s.spawn(move || {
-                    let mut ms = rules[i].search(egraph);
-                    for search_matches in ms.iter_mut() {
-                        //print!("Length before: {}, ", search_matches.substs.len());
-                        search_matches.compute_and_filter_ffns(egraph, &rules[i].searcher);
-                        // TODO here adjust FFN to drop some?
-                        //println!("length after shrinking: {}", search_matches.substs.len());
-                    }
-                    ms
-                }));
-            }
-            for t in threads {
-                matches.push(t.join().unwrap());
-            }});
+        // let egraph = &self.egraph;
+        // // let (tx, rx) = mpsc::channel();
+        // // let iter_r = rules.iter();
+        // let l = rules.len();
+        // thread::scope(|s| {
+        //     let mut threads = vec![];
+        //     for i in 0 .. l {
+        //         threads.push(s.spawn(move || {
+        //             let mut ms = rules[i].search(egraph);
+        //             for search_matches in ms.iter_mut() {
+        //                 //print!("Length before: {}, ", search_matches.substs.len());
+        //                 search_matches.compute_and_filter_ffns(egraph, &rules[i].searcher);
+        //                 // TODO here adjust FFN to drop some?
+        //                 //println!("length after shrinking: {}", search_matches.substs.len());
+        //             }
+        //             ms
+        //         }));
+        //     }
+        //     for t in threads {
+        //         matches.push(t.join().unwrap());
+        //     }});
  
        
-        result = result.and_then(|_| {
+        // result = result.and_then(|_| {
 
-                self.check_limits() });
+        //         self.check_limits() });
             
 // END Multicore version
         let search_time = start_time.elapsed().as_secs_f64();

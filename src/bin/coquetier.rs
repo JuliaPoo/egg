@@ -474,9 +474,7 @@ impl Server {
     }
 
     fn lemma_arity(&self, name: &str) -> usize {
-        let r_opt = self.rules.iter().find(|r| r.rulename == name);
-        if r_opt.is_none() { return 0; }
-        let r = r_opt.unwrap();
+        let r = self.rules.iter().find(|r| r.rulename == name).unwrap();
         let quants : Vec<&String>= r.quantifiers.iter().filter(|s| !s.starts_with("?ffn")).collect();
         quants.len() + r.sideconditions.len()
     }

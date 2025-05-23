@@ -82,7 +82,7 @@ fn find_rw(lemma_arity: &dyn Fn(&str) -> usize, e: &Sexp) -> Option<(bool, Strin
                             Sexp::String(s) => {
                                 if SPECIAL_RULES.contains(&s.as_str()) {
                                     // (holified, fw, name_th, applied_th, new)
-                                    return Some((true, s.to_string(), add_arity_th_name(lemma_arity, &l[1]), l[2].clone()))
+                                    return Some((fw1, s.to_string(), Sexp::Empty, l[2].clone()))
                                 }
                                 let fw2 = !s.contains("-rev");
                                 let fw = fw1 ^ fw2;

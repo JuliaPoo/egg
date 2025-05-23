@@ -269,7 +269,7 @@ pub fn print_equality_proof_to_writer<W: Write>(
                 if "*+-".chars().any(|c| holified.to_string().contains(c)) { continue; }
                 
                 info!("NEW: {}", new.to_string());
-                if !new.is_list() {continue;}
+                // if !new.is_list() {continue;}
                 let res = eval(&new).unwrap();
 
                 writeln!(prefix, "assert {new}={res} by reflexivity.");

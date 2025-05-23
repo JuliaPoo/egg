@@ -267,8 +267,27 @@ pub fn print_equality_proof_to_writer<W: Write>(
                 // special_rule_id += 1;
 
                 if "*+-".chars().any(|c| holified.to_string().contains(c)) { continue; }
-                
                 info!("NEW: {}", new.to_string());
+
+                if !fw {
+                    // Constant folding backwards!
+                    let new_list = new.list().unwrap();
+                    let op = new_list[0].to_string();
+                    let a = new_list[1].to_string();
+                    let b = new_list[2].to_string();
+                    let qop_res = match op.as_str() {
+                        "+" => Ok("Qplus"),
+                        "-" => Ok("Qminus"),
+                        "*" => Ok("Qmult"),
+                        _ => Err(format!("Unsupported literal {op}"))
+                    };
+                    let qop = qop_res.unwrap();
+                    let new_str = format!("({qop} (Qmake {a} xH) (Qmake {b} xH))");
+                    let holified_str = holified.to_string().replace("(!Qmake hole !xH)", "hole");
+                    writeln!(buffer, "eapply (@rew_zoom_fw _ {new_str} _ _ (fun hole => {holified_str}));");
+                    continue;
+                }
+
                 // if !new.is_list() {continue;}
                 let res = eval(&new).unwrap();
 

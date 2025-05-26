@@ -1,5 +1,6 @@
 use symbolic_expressions::*;
 use std::io::{Write, Cursor};
+use regex::Regex;
 use std::cmp::min;
 use log::*;
 use crate::*;
@@ -247,6 +248,8 @@ pub fn print_equality_proof_to_writer<W: Write>(
 ) -> () {
     let mut buffer = Cursor::new(Vec::new());
     let mut prefix = Cursor::new(Vec::new());
+    let re = Regex::new(r" (?P<num>[+-]?\d+) ").unwrap();
+    let sanitize = |s: String| {re.replace_all(s.as_str(), " (${num}) ").to_string()};
     writeln!(prefix, "unshelve (");
     for exp in explanation {
         info!("Writing explanation line: {}", exp);
@@ -284,15 +287,22 @@ pub fn print_equality_proof_to_writer<W: Write>(
                     let qop = qop_res.unwrap();
                     let new_str = format!("({qop} (Qmake {a} xH) (Qmake {b} xH))");
                     let holified_str = holified.to_string().replace("(!Qmake hole !xH)", "hole");
-                    writeln!(buffer, "eapply (@rew_zoom_fw _ {new_str} _ _ (fun hole => {holified_str}));");
+
+                    let res = eval(&new).unwrap();
+                    let sanitized1 = sanitize(format!("assert {new}<-{res} by reflexivity."));
+                    writeln!(prefix, "{sanitized1}");
+                    let sanitized = sanitize(format!("eapply (@rew_zoom_fw _ {new_str} _ _ (fun hole => {holified_str}));"));
+                    writeln!(buffer, "{sanitized}");
                     continue;
                 }
 
                 // if !new.is_list() {continue;}
                 let res = eval(&new).unwrap();
 
-                writeln!(prefix, "assert {new}={res} by reflexivity.");
-                writeln!(buffer, "eapply (@rew_zoom_fw _ {res}%Z _ _ (fun hole => {holified}));");
+                let sanitized1 = sanitize(format!("assert {new}={res} by reflexivity."));
+                writeln!(prefix, "{sanitized1}");
+                let sanitized2 = sanitize(format!("eapply (@rew_zoom_fw _ ({res})%Z _ _ (fun hole => {holified}));"));
+                writeln!(buffer, "{sanitized2}");
             
             }
             continue;
@@ -309,10 +319,12 @@ pub fn print_equality_proof_to_writer<W: Write>(
             format!("(prove_True_eq _ {applied_th})") 
         };
         if is_absurd {
-            writeln!(buffer, "eapply ({rw_lemma} _ {new} _ {th} (fun hole => {holified} = _));");
+            let sanitized = sanitize(format!("eapply ({rw_lemma} _ {new} _ {th} (fun hole => {holified} = _));"));
+            writeln!(buffer, "{sanitized}");
         }
         else {
-            writeln!(buffer, "eapply ({rw_lemma} _ {new} _ {th} (fun hole => {holified}));");
+            let sanitized = sanitize(format!("eapply ({rw_lemma} _ {new} _ {th} (fun hole => {holified}));"));
+            writeln!(buffer, "{sanitized}");
         }
         
     }

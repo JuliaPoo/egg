@@ -324,8 +324,8 @@ impl Server {
             runner: Runner::default()
                 .with_iter_limit(8)
                 .with_explanations_enabled()
-                .with_node_limit(10000)
-                .with_time_limit(instant::Duration::from_secs(4)),
+                .with_node_limit(1000000)
+                .with_time_limit(instant::Duration::from_secs(60)),
             cost: c,
             require_terms: Vec::new()
         }
@@ -577,20 +577,36 @@ impl Server {
         let ffn_limit: usize = usize::try_from(l[2].i().unwrap()).unwrap();
         self.runner.set_iter_limit(ffn_limit + 4);
         let expr: RecExpr<CoquetierLang> = l[1].to_string().parse().unwrap();
-        let expr0: RecExpr<CoquetierLang> = "0".to_string().parse().unwrap();
-        let expr1: RecExpr<CoquetierLang> = "1".to_string().parse().unwrap();
-        let expr2: RecExpr<CoquetierLang> = "2".to_string().parse().unwrap();
-        let expr3: RecExpr<CoquetierLang> = "3".to_string().parse().unwrap();
-        let expr4: RecExpr<CoquetierLang> = "4".to_string().parse().unwrap();
-        let expr5: RecExpr<CoquetierLang> = "5".to_string().parse().unwrap();
-        let expr6: RecExpr<CoquetierLang> = "6".to_string().parse().unwrap();
-        self.runner.add_expr(&expr0);
-        self.runner.add_expr(&expr1);
-        self.runner.add_expr(&expr2);
-        self.runner.add_expr(&expr3);
-        self.runner.add_expr(&expr4);
-        self.runner.add_expr(&expr5);
-        self.runner.add_expr(&expr6);
+        // let expr0: RecExpr<CoquetierLang> = "0".to_string().parse().unwrap();
+        // let expr1: RecExpr<CoquetierLang> = "1".to_string().parse().unwrap();
+        // let expr2: RecExpr<CoquetierLang> = "2".to_string().parse().unwrap();
+        // let expr3: RecExpr<CoquetierLang> = "3".to_string().parse().unwrap();
+        // let expr4: RecExpr<CoquetierLang> = "4".to_string().parse().unwrap();
+        // let expr5: RecExpr<CoquetierLang> = "5".to_string().parse().unwrap();
+        // let expr6: RecExpr<CoquetierLang> = "6".to_string().parse().unwrap();
+        // self.runner.add_expr(&expr0);
+        // self.runner.add_expr(&expr1);
+        // self.runner.add_expr(&expr2);
+        // self.runner.add_expr(&expr3);
+        // self.runner.add_expr(&expr4);
+        // self.runner.add_expr(&expr5);
+        // self.runner.add_expr(&expr6);
+
+        // for op in ["Qplus", "Qminus", "Qmult"].iter() {
+        //     for a in (1..4).into_iter() {
+        //         for b in (1..4).into_iter() {
+        //             let expr_const: RecExpr<CoquetierLang> = format!("
+        //             (annot
+        //                 (&{op}
+        //                     (annot (!Qmake (annot {a} &Z) (annot !xH &positive)) &Q)
+        //                     (annot (!Qmake (annot {b} &Z) (annot !xH &positive)) &Q))
+        //                 &Q)
+        //             ").parse().unwrap();
+        //             self.runner.add_expr(&expr_const);
+        //         }
+        //     }
+        // }
+
         self.runner.add_expr(&expr);
 
         let rewrites: Vec<Rewrite<CoquetierLang, i32, NodeDataType>> = self.obtain_rewrites();

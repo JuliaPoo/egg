@@ -212,6 +212,25 @@ impl CostFunction<SymbolLang> for MotivateTrue<'_> {
     }
 }
 
+fn simpl(sexp: &Sexp) -> Sexp {
+    match sexp {
+        Sexp::List(list) => {
+            match &list[0] {
+                Sexp::String(op) => {
+                    if !"*+-".chars().any(|c| *op == c.to_string()) {
+                        return Sexp::List(list.into_iter().map(|e| simpl(e)).collect());
+                    }
+                    let s = eval(sexp).unwrap();
+                    let res = format!("{s}");
+                    return Sexp::String(res);
+                }
+                _ => sexp.clone()
+            }
+        }
+        _ => sexp.clone()
+    }
+}
+
 fn eval(sexp: &Sexp) -> Result<i64, String> {
     match sexp {
         Sexp::String(s) => Ok(s.parse::<i64>().expect(&format!("{} not a valid i64", s))),
@@ -308,6 +327,7 @@ pub fn print_equality_proof_to_writer<W: Write>(
             continue;
         }
         // println!("Writing {name_th}");
+        let sanitised_holified = simpl(&holified);
         let ref1 = String::from("eggTypeEmbedding");
         let ref2 = String::from("eggTypeEmbedding2");
         if name_th == ref1 || name_th == ref2 { continue; }
@@ -319,11 +339,11 @@ pub fn print_equality_proof_to_writer<W: Write>(
             format!("(prove_True_eq _ {applied_th})") 
         };
         if is_absurd {
-            let sanitized = sanitize(format!("eapply ({rw_lemma} _ {new} _ {th} (fun hole => {holified} = _));"));
+            let sanitized = sanitize(format!("eapply ({rw_lemma} _ {new} _ {th} (fun hole => {sanitised_holified} = _));"));
             writeln!(buffer, "{sanitized}");
         }
         else {
-            let sanitized = sanitize(format!("eapply ({rw_lemma} _ {new} _ {th} (fun hole => {holified}));"));
+            let sanitized = sanitize(format!("eapply ({rw_lemma} _ {new} _ {th} (fun hole => {sanitised_holified}));"));
             writeln!(buffer, "{sanitized}");
         }
         
